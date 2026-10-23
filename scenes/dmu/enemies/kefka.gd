@@ -1,0 +1,46 @@
+extends Node3D
+
+
+@onready var animation_tree: AnimationTree = $AnimationTree
+@onready var state_machine: AnimationNodeStateMachinePlayback = animation_tree["parameters/playback"]
+
+
+func play_lounge_idle():
+	state_machine.travel("lounge_idle")
+
+
+func play_fade_out():
+	state_machine.travel("fade_out")
+
+
+func play_run():
+	state_machine.travel("run")
+
+
+func play_lc_dash():
+	state_machine.start("limit_cut_dash")
+	#state_machine.travel("limit_cut_dash")
+
+
+func play_stand_idle():
+	state_machine.travel("stand_idle")
+
+
+func play_float_to_lounge():
+	state_machine.travel("float_to_lounge")
+
+
+func play_lounge_to_float():
+	state_machine.travel("lounge_to_float")
+
+
+func play_generic_finish():
+	state_machine.travel("generic_finish")
+
+
+func play_taunt():
+	state_machine.travel("taunt")
+
+
+func play_big_finish():
+	state_machine.travel("big_finish")
