@@ -1,4 +1,4 @@
-# Healer Trainer - Slice 4: casting and the global recast
+# Healer Trainer - Slice 6: single-target and party-wide heals
 #
 # Listens for the healer keys the player set in the Escape menu (modifier
 # combinations like Shift+3 work) and performs the matching action from
@@ -9,6 +9,8 @@
 #   - Actions with gcd = true share the global recast: after using one you must wait
 #     "Global Recast" seconds (counted from the start of the cast) before the next.
 #     A thin bar under the cast bar shows the global recast.
+#   - Actions with charges (like the Shift+3 ability) hold a few charges. Each used
+#     charge comes back after its own cooldown. They are listed under the bars.
 #
 # Turn this off by unticking "Enabled" in the Inspector.
 
@@ -19,6 +21,8 @@ const HEALER_KEYBINDS = preload("res://scenes/healer_trainer/healer_keybinds.gd"
 @export var enabled := true
 ## The global recast in seconds (your in-game 2.31).
 @export var global_recast := 2.31
+## Turn on to allow off-global abilities while a cast bar is filling.
+@export var allow_abilities_while_casting := false
 ## Speed (units per second) above which the player counts as "moving".
 @export var move_cancel_speed := 2.0
 ## Space between the bottom of the screen and the cast bar, in pixels.
@@ -38,12 +42,16 @@ var _cast_elapsed := 0.0
 var _cast_duration := 0.0
 var _flash_left := 0.0
 var _gcd_left := 0.0
+var _charges := {}
+var _recharge := {}
 
 var _bar_layer: CanvasLayer
 var _bar_label: Label
 var _bar_progress: ProgressBar
 var _gcd_layer: CanvasLayer
 var _gcd_progress: ProgressBar
+var _cd_layer: CanvasLayer
+var _cd_label: Label
 
 
 func _enter_tree() -> void:
@@ -58,6 +66,8 @@ func _ready() -> void:
 		return
 	_build_cast_bar()
 	_build_gcd_bar()
+	_build_cooldown_label()
+	_init_charges()
 	var keybinds: Dictionary = SavedVariables.get_keybinds()
 	for action: Dictionary in HEALER_KEYBINDS.ACTIONS:
 		var code: int = keybinds.get(action["id"], 0)
@@ -71,6 +81,8 @@ func _physics_process(delta: float) -> void:
 		_gcd_progress.value = 1.0 - _gcd_left / global_recast
 		if _gcd_left <= 0.0:
 			_gcd_layer.visible = false
+	_tick_charges(delta)
+	_update_cooldown_label()
 	if _flash_left > 0.0:
 		_flash_left -= delta
 		if _flash_left <= 0.0:
@@ -109,10 +121,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _on_healer_action(action: Dictionary) -> void:
-	var target := _get_target_role_key()
-	if target == "":
-		print("[HealerTrainer] %s: no target selected (click a party member in the party list)" % action["label"])
-		return
+	# Single-target actions need a selected party member; party-wide actions do not.
+	var target := ""
+	if action.get("target", "single") == "single":
+		target = _get_target_role_key()
+		if target == "":
+			print("[HealerTrainer] %s: no target selected (click a party member in the party list)" % action["label"])
+			return
 	if _get_health() == null:
 		print("[HealerTrainer] %s: party health is not running" % action["label"])
 		return
@@ -120,11 +135,18 @@ func _on_healer_action(action: Dictionary) -> void:
 	if uses_gcd and _gcd_left > 0.0:
 		print("[HealerTrainer] %s: global recast not ready (%.2f s left)" % [action["label"], _gcd_left])
 		return
+	if not uses_gcd and _casting and not allow_abilities_while_casting:
+		print("[HealerTrainer] %s: cannot use abilities while casting" % action["label"])
+		return
+	if not _has_charge(action):
+		print("[HealerTrainer] %s: no charges (next in %.1f s)" % [action["label"], _recharge_left(action)])
+		return
 	var kind: String = action.get("kind", "instant")
 	if kind == "cast":
 		_start_cast(action, target)
 	else:
 		_apply_heal(action, target)
+		_use_charge(action)
 		if uses_gcd:
 			_start_gcd()
 
@@ -132,6 +154,15 @@ func _on_healer_action(action: Dictionary) -> void:
 func _apply_heal(action: Dictionary, target: String) -> void:
 	var health := _get_health()
 	if health == null:
+		return
+	if action.get("target", "single") == "party":
+		var healed := 0
+		for key: String in PartyHealthController.ROLE_KEYS:
+			var hp_before: float = health.get_hp(key)
+			health.heal(key, float(action["amount"]))
+			if health.get_hp(key) > hp_before:
+				healed += 1
+		print("[HealerTrainer] %s: healed %d party members (up to +%d each)" % [action["label"], healed, int(action["amount"])])
 		return
 	var before: float = health.get_hp(target)
 	health.heal(target, float(action["amount"]))
@@ -148,6 +179,7 @@ func _start_cast(action: Dictionary, target: String) -> void:
 		return
 	if action.get("gcd", true):
 		_start_gcd()
+	_use_charge(action)
 	_casting = true
 	_cast_action = action
 	_cast_target = target  # The target is locked in when the cast starts.
@@ -157,7 +189,7 @@ func _start_cast(action: Dictionary, target: String) -> void:
 	_bar_label.text = action["label"]
 	_bar_progress.value = 0.0
 	_bar_layer.visible = true
-	print("[HealerTrainer] Casting %s on %s (%.2f s)" % [action["label"], target, _cast_duration])
+	print("[HealerTrainer] Casting %s on %s (%.2f s)" % [action["label"], target if target != "" else "the party", _cast_duration])
 
 
 func _cancel_cast() -> void:
@@ -173,6 +205,59 @@ func _finish_cast() -> void:
 	_casting = false
 	_bar_layer.visible = false
 	_apply_heal(_cast_action, _cast_target)
+
+
+func _init_charges() -> void:
+	for action: Dictionary in HEALER_KEYBINDS.ACTIONS:
+		var max_charges: int = action.get("charges", 0)
+		if max_charges > 0:
+			_charges[action["id"]] = max_charges
+			_recharge[action["id"]] = 0.0
+
+
+func _has_charge(action: Dictionary) -> bool:
+	if not _charges.has(action["id"]):
+		return true
+	return _charges[action["id"]] > 0
+
+
+func _use_charge(action: Dictionary) -> void:
+	if _charges.has(action["id"]):
+		_charges[action["id"]] -= 1
+
+
+func _recharge_left(action: Dictionary) -> float:
+	var elapsed: float = _recharge.get(action["id"], 0.0)
+	return float(action.get("cooldown", 0.0)) - elapsed
+
+
+# Charges come back one at a time: the cooldown runs while any charge is missing.
+func _tick_charges(delta: float) -> void:
+	for action: Dictionary in HEALER_KEYBINDS.ACTIONS:
+		var id: String = action["id"]
+		if not _charges.has(id):
+			continue
+		if _charges[id] >= int(action["charges"]):
+			_recharge[id] = 0.0
+			continue
+		_recharge[id] += delta
+		var cooldown := float(action["cooldown"])
+		if _recharge[id] >= cooldown:
+			_recharge[id] -= cooldown
+			_charges[id] += 1
+
+
+func _update_cooldown_label() -> void:
+	var lines: Array[String] = []
+	for action: Dictionary in HEALER_KEYBINDS.ACTIONS:
+		var id: String = action["id"]
+		if not _charges.has(id):
+			continue
+		var line := "%s   %d/%d" % [action["label"], _charges[id], int(action["charges"])]
+		if _charges[id] < int(action["charges"]):
+			line += "   (%.1f s)" % _recharge_left(action)
+		lines.append(line)
+	_cd_label.text = "\n".join(lines)
 
 
 func _start_gcd() -> void:
@@ -274,3 +359,23 @@ func _build_gcd_bar() -> void:
 	_gcd_progress.offset_right = 150.0
 	_gcd_progress.offset_top = -(cast_bar_bottom_offset - 6.0)
 	_gcd_progress.offset_bottom = -(cast_bar_bottom_offset - 12.0)
+
+
+# A small text list under the bars showing charges for actions that have them.
+func _build_cooldown_label() -> void:
+	_cd_layer = CanvasLayer.new()
+	_cd_layer.layer = 50
+	add_child(_cd_layer)
+
+	_cd_label = Label.new()
+	_cd_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_cd_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_cd_label.add_theme_font_size_override("font_size", 14)
+	_cd_label.add_theme_constant_override("outline_size", 3)
+	_cd_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	_cd_layer.add_child(_cd_label)
+	_cd_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_cd_label.offset_left = -200.0
+	_cd_label.offset_right = 200.0
+	_cd_label.offset_top = -(cast_bar_bottom_offset - 16.0)
+	_cd_label.offset_bottom = -(cast_bar_bottom_offset - 56.0)
