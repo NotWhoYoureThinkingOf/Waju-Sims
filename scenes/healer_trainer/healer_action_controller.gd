@@ -1,4 +1,4 @@
-# Healer Trainer - Slice 7: slidecasting
+# Healer Trainer - Slice 9: mitigation
 #
 # Listens for the healer keys the player set in the Escape menu (modifier
 # combinations like Shift+3 work) and performs the matching action from
@@ -8,6 +8,10 @@
 #     jumping or dashing while casting interrupts it, as in the game.
 #   - Slidecasting: moving during the last part of a cast (20% by default) does not
 #     interrupt it. A small marker on the cast bar shows where that part begins.
+#   - Mitigation abilities reduce all damage the party takes for a while. Active ones
+#     are listed under the bars with the time they have left.
+#   - Lilies: spells with "uses" spend a shared resource (one lily each). Lilies come
+#     back one at a time and are shown at the top of the list under the bars.
 #   - Actions with gcd = true share the global recast: after using one you must wait
 #     "Global Recast" seconds (counted from the start of the cast) before the next.
 #     A thin bar under the cast bar shows the global recast.
@@ -56,6 +60,8 @@ var _slide_reported := false
 var _gcd_left := 0.0
 var _charges := {}
 var _recharge := {}
+var _pool := {}
+var _pool_timer := {}
 
 var _bar_layer: CanvasLayer
 var _bar_label: Label
@@ -157,16 +163,29 @@ func _on_healer_action(action: Dictionary) -> void:
 		print("[HealerTrainer] %s: cannot use abilities while casting" % action["label"])
 		return
 	if not _has_charge(action):
-		print("[HealerTrainer] %s: no charges (next in %.1f s)" % [action["label"], _recharge_left(action)])
+		print("[HealerTrainer] %s: %s" % [action["label"], _charge_status(action)])
 		return
 	var kind: String = action.get("kind", "instant")
 	if kind == "cast":
 		_start_cast(action, target)
+	elif kind == "mitigation":
+		_apply_mitigation(action)
+		_use_charge(action)
+		if uses_gcd:
+			_start_gcd()
 	else:
 		_apply_heal(action, target)
 		_use_charge(action)
 		if uses_gcd:
 			_start_gcd()
+
+
+func _apply_mitigation(action: Dictionary) -> void:
+	var health := _get_health()
+	if health == null:
+		return
+	health.add_mitigation(action["id"], action["label"], float(action["mitigation"]), float(action["duration"]))
+	print("[HealerTrainer] %s: %d%% less damage taken for %.0f s" % [action["label"], int(round(float(action["mitigation"]) * 100.0)), float(action["duration"])])
 
 
 func _apply_heal(action: Dictionary, target: String) -> void:
@@ -236,15 +255,36 @@ func _init_charges() -> void:
 		if max_charges > 0:
 			_charges[action["id"]] = max_charges
 			_recharge[action["id"]] = 0.0
+	for id: String in HEALER_KEYBINDS.RESOURCES:
+		_pool[id] = int(HEALER_KEYBINDS.RESOURCES[id]["start"])
+		_pool_timer[id] = 0.0
 
 
 func _has_charge(action: Dictionary) -> bool:
+	var uses: Dictionary = action.get("uses", {})
+	for id: String in uses:
+		if int(_pool.get(id, 0)) < int(uses[id]):
+			return false
 	if not _charges.has(action["id"]):
 		return true
 	return _charges[action["id"]] > 0
 
 
+# Describes why an action cannot be used right now (for the Output message).
+func _charge_status(action: Dictionary) -> String:
+	var uses: Dictionary = action.get("uses", {})
+	for id: String in uses:
+		if int(_pool.get(id, 0)) < int(uses[id]):
+			var res: Dictionary = HEALER_KEYBINDS.RESOURCES[id]
+			var wait := float(res["recharge"]) - float(_pool_timer[id])
+			return "not enough %s, next in %.1f s" % [str(res["label"]).to_lower(), wait]
+	return "no charges, next in %.1f s" % _recharge_left(action)
+
+
 func _use_charge(action: Dictionary) -> void:
+	var uses: Dictionary = action.get("uses", {})
+	for id: String in uses:
+		_pool[id] -= int(uses[id])
 	if _charges.has(action["id"]):
 		_charges[action["id"]] -= 1
 
@@ -256,6 +296,15 @@ func _recharge_left(action: Dictionary) -> float:
 
 # Charges come back one at a time: the cooldown runs while any charge is missing.
 func _tick_charges(delta: float) -> void:
+	for id: String in HEALER_KEYBINDS.RESOURCES:
+		var res: Dictionary = HEALER_KEYBINDS.RESOURCES[id]
+		if _pool[id] >= int(res["max"]):
+			_pool_timer[id] = 0.0
+			continue
+		_pool_timer[id] += delta
+		if _pool_timer[id] >= float(res["recharge"]):
+			_pool_timer[id] -= float(res["recharge"])
+			_pool[id] += 1
 	for action: Dictionary in HEALER_KEYBINDS.ACTIONS:
 		var id: String = action["id"]
 		if not _charges.has(id):
@@ -272,6 +321,12 @@ func _tick_charges(delta: float) -> void:
 
 func _update_cooldown_label() -> void:
 	var lines: Array[String] = []
+	for id: String in HEALER_KEYBINDS.RESOURCES:
+		var res: Dictionary = HEALER_KEYBINDS.RESOURCES[id]
+		var pool_line := "%s   %d/%d" % [res["label"], _pool[id], int(res["max"])]
+		if _pool[id] < int(res["max"]):
+			pool_line += "   (%.1f s)" % (float(res["recharge"]) - float(_pool_timer[id]))
+		lines.append(pool_line)
 	for action: Dictionary in HEALER_KEYBINDS.ACTIONS:
 		var id: String = action["id"]
 		if not _charges.has(id):
@@ -280,6 +335,10 @@ func _update_cooldown_label() -> void:
 		if _charges[id] < int(action["charges"]):
 			line += "   (%.1f s)" % _recharge_left(action)
 		lines.append(line)
+	var health := _get_health()
+	if health != null:
+		for m: Dictionary in health.get_mitigations():
+			lines.append("%s   active   %.1f s" % [m["label"], m["left"]])
 	_cd_label.text = "\n".join(lines)
 
 

@@ -27,6 +27,7 @@ var _hp := {}
 var _anim: AnimationPlayer
 var _party_list: PartyList
 var _hit_done := false
+var _mitigations := {}
 
 
 func _ready() -> void:
@@ -35,7 +36,8 @@ func _ready() -> void:
 		return
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_tick_mitigations(delta)
 	# Find the things we need. They may not exist for the first few frames.
 	if _anim == null:
 		_anim = get_tree().root.find_child(ANIM_NODE_NAME, true, false) as AnimationPlayer
@@ -59,12 +61,15 @@ func _process(_delta: float) -> void:
 
 func reset_all() -> void:
 	_hit_done = false
+	_mitigations.clear()
 	for key in ROLE_KEYS:
 		_hp[key] = max_hp
 		_push_to_ui(key)
 
 
 func damage_all(amount: float) -> void:
+	var multiplier := get_damage_multiplier()
+	print("[HealerTrainer] Party hit: %d damage, %d%% mitigation -> %d each" % [int(amount), int(round((1.0 - multiplier) * 100.0)), int(amount * multiplier)])
 	for key in ROLE_KEYS:
 		apply_damage(key, amount)
 
@@ -72,7 +77,8 @@ func damage_all(amount: float) -> void:
 func apply_damage(role_key: String, amount: float) -> void:
 	if not _hp.has(role_key):
 		return
-	_hp[role_key] = maxf(_hp[role_key] - amount, 0.0)
+	# Damage is reduced by every active mitigation (each one multiplies the damage taken).
+	_hp[role_key] = maxf(_hp[role_key] - amount * get_damage_multiplier(), 0.0)
 	_push_to_ui(role_key)
 
 
@@ -84,6 +90,30 @@ func heal(role_key: String, amount: float) -> float:
 	_hp[role_key] = minf(before + amount, max_hp)
 	_push_to_ui(role_key)
 	return _hp[role_key] - before
+
+
+# Slice 9: mitigation. Each active effect reduces damage taken by "percent" (0.10 = 10%)
+# for "duration" seconds. Several effects at once multiply together.
+func add_mitigation(id: String, label: String, percent: float, duration: float) -> void:
+	_mitigations[id] = {"label": label, "percent": percent, "left": duration}
+
+
+func get_damage_multiplier() -> float:
+	var multiplier := 1.0
+	for id: String in _mitigations:
+		multiplier *= 1.0 - float(_mitigations[id]["percent"])
+	return multiplier
+
+
+func get_mitigations() -> Array:
+	return _mitigations.values()
+
+
+func _tick_mitigations(delta: float) -> void:
+	for id: String in _mitigations.keys():
+		_mitigations[id]["left"] -= delta
+		if _mitigations[id]["left"] <= 0.0:
+			_mitigations.erase(id)
 
 
 func get_hp(role_key: String) -> float:
