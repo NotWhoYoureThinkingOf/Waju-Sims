@@ -1,4 +1,4 @@
-# Healer Trainer - Slice 6: single-target and party-wide heals
+# Healer Trainer - Slice 7: slidecasting
 #
 # Listens for the healer keys the player set in the Escape menu (modifier
 # combinations like Shift+3 work) and performs the matching action from
@@ -6,6 +6,8 @@
 #   - "instant" actions heal immediately.
 #   - "cast" actions show a cast bar, and heal when the cast finishes. Moving,
 #     jumping or dashing while casting interrupts it, as in the game.
+#   - Slidecasting: moving during the last part of a cast (20% by default) does not
+#     interrupt it. A small marker on the cast bar shows where that part begins.
 #   - Actions with gcd = true share the global recast: after using one you must wait
 #     "Global Recast" seconds (counted from the start of the cast) before the next.
 #     A thin bar under the cast bar shows the global recast.
@@ -23,6 +25,14 @@ const HEALER_KEYBINDS = preload("res://scenes/healer_trainer/healer_keybinds.gd"
 @export var global_recast := 2.31
 ## Turn on to allow off-global abilities while a cast bar is filling.
 @export var allow_abilities_while_casting := false
+## Slidecasting: moving during the last part of a cast does not interrupt it.
+## This is the fraction of the cast at the end that counts (0.2 = the last 20%).
+@export_range(0.0, 0.5, 0.01) var slidecast_window := 0.2
+## Random amount added or removed from the window on every cast, like the real game's
+## inconsistency (0 = always exactly the same, which is best for repeatable practice).
+@export_range(0.0, 0.2, 0.01) var slidecast_jitter := 0.0
+## Show a small marker on the cast bar where the slidecast window starts.
+@export var show_slidecast_marker := true
 ## Speed (units per second) above which the player counts as "moving".
 @export var move_cancel_speed := 2.0
 ## Space between the bottom of the screen and the cast bar, in pixels.
@@ -41,6 +51,8 @@ var _cast_target := ""
 var _cast_elapsed := 0.0
 var _cast_duration := 0.0
 var _flash_left := 0.0
+var _slide_time := 0.0
+var _slide_reported := false
 var _gcd_left := 0.0
 var _charges := {}
 var _recharge := {}
@@ -48,6 +60,7 @@ var _recharge := {}
 var _bar_layer: CanvasLayer
 var _bar_label: Label
 var _bar_progress: ProgressBar
+var _slide_marker: ColorRect
 var _gcd_layer: CanvasLayer
 var _gcd_progress: ProgressBar
 var _cd_layer: CanvasLayer
@@ -90,8 +103,13 @@ func _physics_process(delta: float) -> void:
 	if not _casting:
 		return
 	if _moving:
-		_cancel_cast()
-		return
+		var time_left := _cast_duration - _cast_elapsed
+		if time_left > _slide_time:
+			_cancel_cast()
+			return
+		if not _slide_reported:
+			_slide_reported = true
+			print("[HealerTrainer] Slidecast: moved with %.2f s of the cast left" % time_left)
 	_cast_elapsed += delta
 	_bar_progress.value = clampf(_cast_elapsed / _cast_duration, 0.0, 1.0)
 	if _cast_elapsed >= _cast_duration:
@@ -185,6 +203,11 @@ func _start_cast(action: Dictionary, target: String) -> void:
 	_cast_target = target  # The target is locked in when the cast starts.
 	_cast_elapsed = 0.0
 	_cast_duration = maxf(float(action["cast_time"]), 0.01)
+	var fraction := clampf(slidecast_window + randf_range(-slidecast_jitter, slidecast_jitter), 0.0, 0.5)
+	_slide_time = _cast_duration * fraction
+	_slide_reported = false
+	_slide_marker.visible = show_slidecast_marker and slidecast_window > 0.0
+	_slide_marker.position = Vector2(_bar_progress.custom_minimum_size.x * (1.0 - slidecast_window), 0.0)
 	_flash_left = 0.0
 	_bar_label.text = action["label"]
 	_bar_progress.value = 0.0
@@ -338,6 +361,14 @@ func _build_cast_bar() -> void:
 	_bar_progress.custom_minimum_size = Vector2(300.0, 16.0)
 	_bar_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_child(_bar_progress)
+
+	# A thin marker on the cast bar where the nominal slidecast window starts.
+	_slide_marker = ColorRect.new()
+	_slide_marker.color = Color(1.0, 1.0, 1.0, 0.85)
+	_slide_marker.size = Vector2(2.0, 16.0)
+	_slide_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_slide_marker.visible = false
+	_bar_progress.add_child(_slide_marker)
 
 
 # A thin bar just under the cast bar that fills while the global recast is running.
