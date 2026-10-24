@@ -11,6 +11,7 @@ extends Node
 signal keybind_changed(keybinds: Dictionary)
 
 const CONFIG_FILE_PATH = "user://config.cfg"
+const HEALER_KEYBINDS = preload("res://scenes/healer_trainer/healer_keybinds.gd")
 
 var config_file: ConfigFile
 var save_data: Dictionary = {
@@ -75,6 +76,7 @@ func _ready() -> void:
 	GameEvents.variable_removed.connect(on_variable_removed)
 	config_file = ConfigFile.new()
 	load_save_file()
+	register_healer_keybinds()
 	set_defaults()
 	set_keybinds()
 	save()
@@ -130,8 +132,18 @@ func on_variable_removed(section: String, key: String) -> void:
 	save()
 
 
+# Healer Trainer: give healer keybinds a default value if the player has not set one yet.
+func register_healer_keybinds() -> void:
+	for action: Dictionary in HEALER_KEYBINDS.ACTIONS:
+		if not save_data["keybinds"].has(action["id"]):
+			save_data["keybinds"][action["id"]] = action["default"]
+
+
 func set_keybinds() -> void:
 	for key: String in save_data["keybinds"]:
+		# Healer Trainer: new keybinds need a matching input action to exist.
+		if not InputMap.has_action(key):
+			InputMap.add_action(key)
 		var new_key_event := InputEventKey.new()
 		new_key_event.set_keycode(save_data["keybinds"][key])
 		if !InputMap.action_has_event(key, new_key_event):
