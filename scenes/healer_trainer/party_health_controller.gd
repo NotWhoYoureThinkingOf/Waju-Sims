@@ -76,6 +76,16 @@ func apply_damage(role_key: String, amount: float) -> void:
 	_push_to_ui(role_key)
 
 
+# Slice 2B: restore HP (never above max). Returns how much HP was actually restored.
+func heal(role_key: String, amount: float) -> float:
+	if not _hp.has(role_key):
+		return 0.0
+	var before: float = _hp[role_key]
+	_hp[role_key] = minf(before + amount, max_hp)
+	_push_to_ui(role_key)
+	return _hp[role_key] - before
+
+
 func get_hp(role_key: String) -> float:
 	return _hp.get(role_key, 0.0)
 
