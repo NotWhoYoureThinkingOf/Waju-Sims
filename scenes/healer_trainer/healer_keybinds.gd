@@ -6,6 +6,8 @@
 #
 #   id        = name saved in the config file (must be unique, no spaces)
 #   label     = text shown in the Escape menu and on the cast bar
+#   short     = (optional) short name drawn on the hotbar when there is no icon picture.
+#               Icon pictures are PNG files named after the id, see healer_icons.gd.
 #   default   = starting key: KEY_3 for "3", or KEY_3 | KEY_MASK_SHIFT for "Shift+3".
 #               Also available: KEY_MASK_CTRL and KEY_MASK_ALT.
 #               The player can change any key in the Escape menu at any time.
@@ -34,11 +36,12 @@ const RESOURCES := {
 }
 
 const ACTIONS := [
-	{"id": "heal_st_instant_1", "label": "Tetragrammaton", "default": KEY_3 | KEY_MASK_SHIFT, "kind": "instant", "gcd": false, "charges": 2, "cooldown": 30.0, "cast_time": 0.0, "amount": 30.0},
-	{"id": "heal_st_instant_2", "label": "Afflatus Solace", "default": KEY_4 | KEY_MASK_SHIFT, "kind": "instant", "gcd": true, "uses": {"lily": 1}, "cast_time": 0.0, "amount": 30.0},
-	{"id": "heal_st_cast_1", "label": "Cure II", "default": KEY_2 | KEY_MASK_SHIFT, "kind": "cast", "gcd": true, "cast_time": 1.85, "amount": 60.0},
-	{"id": "heal_aoe_instant_1", "label": "Afflatus Rapture", "default": KEY_5 | KEY_MASK_SHIFT, "kind": "instant", "gcd": true, "uses": {"lily": 1}, "target": "party", "cast_time": 0.0, "amount": 20.0},
-	{"id": "heal_aoe_cast_1", "label": "Medica", "default": KEY_6 | KEY_MASK_SHIFT, "kind": "cast", "gcd": true, "target": "party", "cast_time": 1.85, "amount": 40.0},
-	{"id": "mit_plenary", "label": "Plenary Indulgence", "default": KEY_7 | KEY_MASK_SHIFT, "kind": "mitigation", "gcd": false, "target": "party", "mitigation": 0.10, "duration": 10.0, "charges": 1, "cooldown": 60.0, "cast_time": 0.0, "amount": 0.0},
-	{"id": "mit_temperance", "label": "Temperance", "default": KEY_8 | KEY_MASK_SHIFT, "kind": "mitigation", "gcd": false, "target": "party", "mitigation": 0.10, "duration": 20.0, "charges": 1, "cooldown": 120.0, "cast_time": 0.0, "amount": 0.0},
+	{"id": "heal_st_instant_1", "label": "Tetragrammaton", "short": "Tetra", "default": KEY_3 | KEY_MASK_SHIFT, "kind": "instant", "gcd": false, "charges": 2, "cooldown": 30.0, "cast_time": 0.0, "amount": 30.0},
+	{"id": "heal_st_instant_2", "label": "Afflatus Solace", "short": "Solace", "default": KEY_4 | KEY_MASK_SHIFT, "kind": "instant", "gcd": true, "uses": {"lily": 1}, "cast_time": 0.0, "amount": 30.0},
+	{"id": "heal_st_cast_1", "label": "Cure II", "short": "Cure II", "default": KEY_2, "kind": "cast", "gcd": true, "cast_time": 1.85, "amount": 60.0},
+	{"id": "heal_aoe_instant_1", "label": "Afflatus Rapture", "short": "Rapture", "default": KEY_5, "kind": "instant", "gcd": true, "uses": {"lily": 1}, "target": "party", "cast_time": 0.0, "amount": 20.0},
+	{"id": "heal_aoe_cast_1", "label": "Medica", "short": "Medica", "default": KEY_6, "kind": "cast", "gcd": true, "target": "party", "cast_time": 1.85, "amount": 40.0},
+	{"id": "mit_plenary", "label": "Plenary Indulgence", "short": "Plenary", "default": KEY_7 | KEY_MASK_CTRL, "kind": "mitigation", "gcd": false, "target": "party", "mitigation": 0.10, "duration": 10.0, "charges": 1, "cooldown": 60.0, "cast_time": 0.0, "amount": 0.0},
+	{"id": "mit_temperance", "label": "Temperance", "short": "Temp.", "default": KEY_8, "kind": "mitigation", "gcd": false, "target": "party", "mitigation": 0.10, "duration": 20.0, "charges": 1, "cooldown": 120.0, "cast_time": 0.0, "amount": 0.0},
+	{"id": "heal_aoe_assize", "label": "Assize", "short": "Assize", "default": KEY_5 | KEY_MASK_SHIFT, "kind": "instant", "gcd": false, "target": "party", "charges": 1, "cooldown": 40.0, "cast_time": 0.0, "amount": 20.0},
 ]

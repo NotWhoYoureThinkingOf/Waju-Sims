@@ -1,4 +1,4 @@
-# Healer Trainer - Slice 9: mitigation
+# Healer Trainer - Slice 13: icons, buff bar, Assize
 #
 # Listens for the healer keys the player set in the Escape menu (modifier
 # combinations like Shift+3 work) and performs the matching action from
@@ -8,6 +8,9 @@
 #     jumping or dashing while casting interrupts it, as in the game.
 #   - Slidecasting: moving during the last part of a cast (20% by default) does not
 #     interrupt it. A small marker on the cast bar shows where that part begins.
+#   - The hotbar (healer_hotbar.gd) shows every action in the slot that matches its key
+#     (plain keys on the bottom row, Ctrl on the middle row, Shift on the top row). It can
+#     be clicked with the mouse, and shows charges and cooldown seconds on each icon.
 #   - Mitigation abilities reduce all damage the party takes for a while. Active ones
 #     are listed under the bars with the time they have left.
 #   - Lilies: spells with "uses" spend a shared resource (one lily each). Lilies come
@@ -23,6 +26,8 @@
 extends Node
 
 const HEALER_KEYBINDS = preload("res://scenes/healer_trainer/healer_keybinds.gd")
+const HOTBAR = preload("res://scenes/healer_trainer/healer_hotbar.gd")
+const BUFF_BAR = preload("res://scenes/healer_trainer/healer_buff_bar.gd")
 
 @export var enabled := true
 ## The global recast in seconds (your in-game 2.31).
@@ -40,9 +45,22 @@ const HEALER_KEYBINDS = preload("res://scenes/healer_trainer/healer_keybinds.gd"
 ## Speed (units per second) above which the player counts as "moving".
 @export var move_cancel_speed := 2.0
 ## Space between the bottom of the screen and the cast bar, in pixels.
-@export var cast_bar_bottom_offset := 190.0
+@export var cast_bar_bottom_offset := 230.0
+## Show the clickable hotbar.
+@export var show_hotbar := true
+## Space between the bottom of the screen and the hotbar, in pixels.
+@export var hotbar_bottom_offset := 8.0
+## Moves the hotbar left (negative) or right (positive), in pixels.
+@export var hotbar_offset_x := 0.0
+## Show the buff bar (damage reduction effects on you, with time left).
+@export var show_buff_bar := true
+## Where the buff bar sits: 0 to 1 across the screen, and 0 to 1 down the screen.
+@export_range(0.0, 1.0, 0.005) var buff_bar_anchor_x := 0.576
+@export_range(0.0, 1.0, 0.005) var buff_bar_anchor_y := 0.60
 
 var _control_menu: CanvasLayer
+var _hotbar
+var _buff_bar
 var _health: PartyHealthController
 var _player: CharacterBody3D
 var _last_pos := Vector3.ZERO
@@ -87,6 +105,14 @@ func _ready() -> void:
 	_build_gcd_bar()
 	_build_cooldown_label()
 	_init_charges()
+	if show_hotbar:
+		_hotbar = HOTBAR.new()
+		add_child(_hotbar)
+		_hotbar.setup(self, _control_menu, hotbar_bottom_offset, hotbar_offset_x)
+	if show_buff_bar:
+		_buff_bar = BUFF_BAR.new()
+		add_child(_buff_bar)
+		_buff_bar.setup(self, buff_bar_anchor_x, buff_bar_anchor_y)
 	var keybinds: Dictionary = SavedVariables.get_keybinds()
 	for action: Dictionary in HEALER_KEYBINDS.ACTIONS:
 		var code: int = keybinds.get(action["id"], 0)
@@ -142,6 +168,43 @@ func _unhandled_input(event: InputEvent) -> void:
 		if keycode == keybinds.get(action["id"], 0):
 			_on_healer_action(action)
 			return
+
+
+# Used by the hotbar when an icon is clicked. Follows the same rules as pressing the key.
+func use_action(action: Dictionary) -> void:
+	if not enabled:
+		return
+	if _control_menu != null and _control_menu.visible:
+		return
+	if Global.is_moving_ui:
+		return
+	_on_healer_action(action)
+
+
+# Used by the buff bar: the effects currently on the party, each with "id", "label", "left".
+func get_active_buffs() -> Array:
+	var health := _get_health()
+	if health == null:
+		return []
+	return health.get_mitigations()
+
+
+# Used by the hotbar to draw charges, cooldowns and the global recast on each icon.
+func get_action_state(action: Dictionary) -> Dictionary:
+	var id: String = action["id"]
+	var uses_gcd: bool = action.get("gcd", true)
+	var state := {
+		"ready": _has_charge(action),
+		"gcd_left": _gcd_left if uses_gcd else 0.0,
+		"gcd_total": global_recast,
+		"charges": -1,
+		"recharge_left": 0.0,
+	}
+	if _charges.has(id):
+		state["charges"] = int(_charges[id])
+		if int(_charges[id]) < int(action["charges"]):
+			state["recharge_left"] = _recharge_left(action)
+	return state
 
 
 func _on_healer_action(action: Dictionary) -> void:
@@ -327,18 +390,6 @@ func _update_cooldown_label() -> void:
 		if _pool[id] < int(res["max"]):
 			pool_line += "   (%.1f s)" % (float(res["recharge"]) - float(_pool_timer[id]))
 		lines.append(pool_line)
-	for action: Dictionary in HEALER_KEYBINDS.ACTIONS:
-		var id: String = action["id"]
-		if not _charges.has(id):
-			continue
-		var line := "%s   %d/%d" % [action["label"], _charges[id], int(action["charges"])]
-		if _charges[id] < int(action["charges"]):
-			line += "   (%.1f s)" % _recharge_left(action)
-		lines.append(line)
-	var health := _get_health()
-	if health != null:
-		for m: Dictionary in health.get_mitigations():
-			lines.append("%s   active   %.1f s" % [m["label"], m["left"]])
 	_cd_label.text = "\n".join(lines)
 
 
@@ -451,21 +502,24 @@ func _build_gcd_bar() -> void:
 	_gcd_progress.offset_bottom = -(cast_bar_bottom_offset - 12.0)
 
 
-# A small text list under the bars showing charges for actions that have them.
+# A small text line above the hotbar showing the lilies.
 func _build_cooldown_label() -> void:
 	_cd_layer = CanvasLayer.new()
 	_cd_layer.layer = 50
 	add_child(_cd_layer)
 
 	_cd_label = Label.new()
-	_cd_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_cd_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_cd_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_cd_label.add_theme_font_size_override("font_size", 14)
 	_cd_label.add_theme_constant_override("outline_size", 3)
 	_cd_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	_cd_layer.add_child(_cd_label)
 	_cd_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_cd_label.offset_left = -200.0
-	_cd_label.offset_right = 200.0
-	_cd_label.offset_top = -(cast_bar_bottom_offset - 16.0)
-	_cd_label.offset_bottom = -(cast_bar_bottom_offset - 56.0)
+	# Sits just above the top row of the hotbar, lined up with its right edge.
+	var hotbar_top := hotbar_bottom_offset + 3.0 * 47.0 - 3.0
+	var hotbar_half_width := 12.0 * 47.0 / 2.0 - 1.5
+	_cd_label.offset_right = hotbar_half_width + hotbar_offset_x
+	_cd_label.offset_left = _cd_label.offset_right - 250.0
+	_cd_label.offset_bottom = -(hotbar_top + 6.0)
+	_cd_label.offset_top = _cd_label.offset_bottom - 24.0
