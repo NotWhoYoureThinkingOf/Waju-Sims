@@ -1,4 +1,4 @@
-# Healer Trainer - Slice 13: icons, buff bar, Assize
+# Healer Trainer - Slice 15: movable and resizable HUD
 #
 # Listens for the healer keys the player set in the Escape menu (modifier
 # combinations like Shift+3 work) and performs the matching action from
@@ -28,6 +28,7 @@ extends Node
 const HEALER_KEYBINDS = preload("res://scenes/healer_trainer/healer_keybinds.gd")
 const HOTBAR = preload("res://scenes/healer_trainer/healer_hotbar.gd")
 const BUFF_BAR = preload("res://scenes/healer_trainer/healer_buff_bar.gd")
+const MOVABLE = preload("res://scenes/healer_trainer/healer_movable.gd")
 
 @export var enabled := true
 ## The global recast in seconds (your in-game 2.31).
@@ -44,19 +45,20 @@ const BUFF_BAR = preload("res://scenes/healer_trainer/healer_buff_bar.gd")
 @export var show_slidecast_marker := true
 ## Speed (units per second) above which the player counts as "moving".
 @export var move_cancel_speed := 2.0
-## Space between the bottom of the screen and the cast bar, in pixels.
-@export var cast_bar_bottom_offset := 230.0
+## Where the cast bar STARTS: space between the bottom of the screen and the bar, in pixels.
+## Hold Alt in the sim to drag it somewhere else; that choice is saved.
+@export var cast_bar_bottom_offset := 250.0
 ## Show the clickable hotbar.
 @export var show_hotbar := true
-## Space between the bottom of the screen and the hotbar, in pixels.
+## Where the hotbar STARTS: space between the bottom of the screen and the hotbar, in pixels.
 @export var hotbar_bottom_offset := 8.0
-## Moves the hotbar left (negative) or right (positive), in pixels.
+## Where the hotbar STARTS: moves it left (negative) or right (positive), in pixels.
 @export var hotbar_offset_x := 0.0
 ## Show the buff bar (damage reduction effects on you, with time left).
 @export var show_buff_bar := true
-## Where the buff bar sits: 0 to 1 across the screen, and 0 to 1 down the screen.
+## Where the buff bar STARTS: 0 to 1 across the screen, and 0 to 1 down the screen.
 @export_range(0.0, 1.0, 0.005) var buff_bar_anchor_x := 0.576
-@export_range(0.0, 1.0, 0.005) var buff_bar_anchor_y := 0.60
+@export_range(0.0, 1.0, 0.005) var buff_bar_anchor_y := 0.50
 
 var _control_menu: CanvasLayer
 var _hotbar
@@ -81,13 +83,12 @@ var _recharge := {}
 var _pool := {}
 var _pool_timer := {}
 
-var _bar_layer: CanvasLayer
+var _bar_layer: Control
 var _bar_label: Label
 var _bar_progress: ProgressBar
 var _slide_marker: ColorRect
-var _gcd_layer: CanvasLayer
+var _gcd_layer: Control
 var _gcd_progress: ProgressBar
-var _cd_layer: CanvasLayer
 var _cd_label: Label
 
 
@@ -102,17 +103,16 @@ func _ready() -> void:
 		set_physics_process(false)
 		return
 	_build_cast_bar()
-	_build_gcd_bar()
 	_build_cooldown_label()
 	_init_charges()
 	if show_hotbar:
 		_hotbar = HOTBAR.new()
-		add_child(_hotbar)
-		_hotbar.setup(self, _control_menu, hotbar_bottom_offset, hotbar_offset_x)
+		_hotbar.setup(self, _control_menu)
+		_make_movable("healer_hotbar", _hotbar, "Hotbar", _hotbar_default_anchor(), 49)
 	if show_buff_bar:
 		_buff_bar = BUFF_BAR.new()
-		add_child(_buff_bar)
-		_buff_bar.setup(self, buff_bar_anchor_x, buff_bar_anchor_y)
+		_buff_bar.setup(self)
+		_make_movable("healer_buff_bar", _buff_bar, "Buffs", [buff_bar_anchor_x, buff_bar_anchor_y], 48)
 	var keybinds: Dictionary = SavedVariables.get_keybinds()
 	for action: Dictionary in HEALER_KEYBINDS.ACTIONS:
 		var code: int = keybinds.get(action["id"], 0)
@@ -440,20 +440,48 @@ func _get_target_role_key() -> String:
 
 
 # A simple cast bar built in code, near the bottom centre of the screen.
+# Wraps a HUD piece so it can be moved and resized with the Move UI key, like the sim's own.
+# default_anchor = [x, y]: where the top left corner starts, as a fraction of the screen.
+func _make_movable(key: String, content: Control, title: String, default_anchor: Array, layer_number: int) -> void:
+	var wrapper = MOVABLE.new()
+	add_child(wrapper)
+	wrapper.setup(key, content, title, default_anchor, layer_number, get_node_or_null("%MoveUIResetButton"))
+
+
+func _screen_size() -> Vector2:
+	return get_viewport().get_visible_rect().size
+
+
+# Where the hotbar starts (bottom centre of the screen) before you move it.
+func _hotbar_default_anchor() -> Array:
+	var screen := _screen_size()
+	var width := 12.0 * 47.0 - 3.0
+	var height := 4.0 * 47.0 - 3.0
+	return [
+		(screen.x / 2.0 + hotbar_offset_x - width / 2.0) / screen.x,
+		(screen.y - hotbar_bottom_offset - height) / screen.y,
+	]
+
+
+# The cast bar with the thin global recast bar under it, as one movable piece.
 func _build_cast_bar() -> void:
-	_bar_layer = CanvasLayer.new()
-	_bar_layer.layer = 50
-	_bar_layer.visible = false
-	add_child(_bar_layer)
+	var group := VBoxContainer.new()
+	group.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	group.add_theme_constant_override("separation", 6)
+
+	# Fixed-size holders keep the group the same size whether or not a bar is showing.
+	var cast_holder := Control.new()
+	cast_holder.custom_minimum_size = Vector2(300.0, 44.0)
+	cast_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	group.add_child(cast_holder)
 
 	var box := VBoxContainer.new()
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_bar_layer.add_child(box)
-	box.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	box.offset_left = -150.0
-	box.offset_right = 150.0
-	box.offset_top = -(cast_bar_bottom_offset + 44.0)
-	box.offset_bottom = -cast_bar_bottom_offset
+	box.position = Vector2(0.0, 0.0)
+	box.size = Vector2(300.0, 44.0)
+	box.visible = false
+	cast_holder.add_child(box)
+	_bar_layer = box
 
 	_bar_label = Label.new()
 	_bar_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -480,13 +508,11 @@ func _build_cast_bar() -> void:
 	_slide_marker.visible = false
 	_bar_progress.add_child(_slide_marker)
 
-
-# A thin bar just under the cast bar that fills while the global recast is running.
-func _build_gcd_bar() -> void:
-	_gcd_layer = CanvasLayer.new()
-	_gcd_layer.layer = 50
-	_gcd_layer.visible = false
-	add_child(_gcd_layer)
+	# The global recast bar, just under the cast bar.
+	var gcd_holder := Control.new()
+	gcd_holder.custom_minimum_size = Vector2(300.0, 6.0)
+	gcd_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	group.add_child(gcd_holder)
 
 	_gcd_progress = ProgressBar.new()
 	_gcd_progress.min_value = 0.0
@@ -494,32 +520,31 @@ func _build_gcd_bar() -> void:
 	_gcd_progress.step = 0.001
 	_gcd_progress.show_percentage = false
 	_gcd_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_gcd_layer.add_child(_gcd_progress)
-	_gcd_progress.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_gcd_progress.offset_left = -150.0
-	_gcd_progress.offset_right = 150.0
-	_gcd_progress.offset_top = -(cast_bar_bottom_offset - 6.0)
-	_gcd_progress.offset_bottom = -(cast_bar_bottom_offset - 12.0)
+	_gcd_progress.position = Vector2(0.0, 0.0)
+	_gcd_progress.size = Vector2(300.0, 6.0)
+	_gcd_progress.visible = false
+	gcd_holder.add_child(_gcd_progress)
+	_gcd_layer = _gcd_progress
+
+	var screen := _screen_size()
+	_make_movable("healer_cast_bar", group, "Cast Bar",
+		[(screen.x / 2.0 - 150.0) / screen.x, (screen.y - cast_bar_bottom_offset - 44.0) / screen.y], 50)
 
 
-# A small text line above the hotbar showing the lilies.
+# A small text line showing the lilies, above the hotbar.
 func _build_cooldown_label() -> void:
-	_cd_layer = CanvasLayer.new()
-	_cd_layer.layer = 50
-	add_child(_cd_layer)
-
 	_cd_label = Label.new()
 	_cd_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_cd_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_cd_label.custom_minimum_size = Vector2(250.0, 24.0)
 	_cd_label.add_theme_font_size_override("font_size", 14)
 	_cd_label.add_theme_constant_override("outline_size", 3)
 	_cd_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	_cd_layer.add_child(_cd_label)
-	_cd_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	# Sits just above the top row of the hotbar, lined up with its right edge.
-	var hotbar_top := hotbar_bottom_offset + 3.0 * 47.0 - 3.0
-	var hotbar_half_width := 12.0 * 47.0 / 2.0 - 1.5
-	_cd_label.offset_right = hotbar_half_width + hotbar_offset_x
-	_cd_label.offset_left = _cd_label.offset_right - 250.0
-	_cd_label.offset_bottom = -(hotbar_top + 6.0)
-	_cd_label.offset_top = _cd_label.offset_bottom - 24.0
+
+	# Starts just above the hotbar, lined up with its right edge.
+	var screen := _screen_size()
+	var hotbar_width := 12.0 * 47.0 - 3.0
+	var hotbar_height := 4.0 * 47.0 - 3.0
+	_make_movable("healer_lilies", _cd_label, "Lilies",
+		[(screen.x / 2.0 + hotbar_offset_x + hotbar_width / 2.0 - 250.0) / screen.x,
+		(screen.y - hotbar_bottom_offset - hotbar_height - 6.0 - 24.0) / screen.y], 50)

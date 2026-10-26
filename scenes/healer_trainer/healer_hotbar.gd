@@ -15,7 +15,7 @@
 # Icons are PNG files loaded from waju-sim/assets/healer_icons/ (see healer_icons.gd).
 # An action with no icon file shows a coloured square with its short name.
 
-extends CanvasLayer
+extends Control
 
 const HEALER_KEYBINDS = preload("res://scenes/healer_trainer/healer_keybinds.gd")
 const ICONS = preload("res://scenes/healer_trainer/healer_icons.gd")
@@ -25,6 +25,10 @@ const SLOT_GAP := 3.0
 const COLUMNS := 12
 const ROWS := 3  # shift, ctrl, plain. A row above them is used for actions on other keys.
 
+# Size of the whole hotbar, including the extra row on top.
+const TOTAL_WIDTH := COLUMNS * (SLOT_SIZE + SLOT_GAP) - SLOT_GAP
+const TOTAL_HEIGHT := (ROWS + 1) * (SLOT_SIZE + SLOT_GAP) - SLOT_GAP
+
 # Which column each number key sits in (the order of the keys on a keyboard).
 const KEY_COLUMNS := {
 	KEY_1: 0, KEY_2: 1, KEY_3: 2, KEY_4: 3, KEY_5: 4, KEY_6: 5,
@@ -33,18 +37,14 @@ const KEY_COLUMNS := {
 
 var _controller
 var _control_menu: CanvasLayer
-var _bottom_offset := 8.0
-var _offset_x := 0.0
-var _root: Control
 var _slots: Array = []
 
 
-func setup(controller, control_menu: CanvasLayer, bottom_offset: float, offset_x: float) -> void:
+func setup(controller, control_menu: CanvasLayer) -> void:
 	_controller = controller
 	_control_menu = control_menu
-	_bottom_offset = bottom_offset
-	_offset_x = offset_x
-	layer = 49
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	custom_minimum_size = Vector2(TOTAL_WIDTH, TOTAL_HEIGHT)
 	_build_frame()
 	refresh()
 	if _control_menu != null:
@@ -110,36 +110,26 @@ func _on_slot_gui_input(event: InputEvent, action: Dictionary) -> void:
 
 
 func _build_frame() -> void:
-	var width := COLUMNS * (SLOT_SIZE + SLOT_GAP) - SLOT_GAP
-	var height := ROWS * (SLOT_SIZE + SLOT_GAP) - SLOT_GAP
-	_root = Control.new()
-	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_root)
-	_root.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_root.offset_left = -width / 2.0 + _offset_x
-	_root.offset_right = width / 2.0 + _offset_x
-	_root.offset_top = -(_bottom_offset + height)
-	_root.offset_bottom = -_bottom_offset
-
-	# Faint empty slots, like an empty hotbar in the game.
+	# Faint empty slots, like an empty hotbar in the game. The extra row on top stays empty
+	# unless an action is on a key that does not fit the grid.
 	for row in range(ROWS):
 		for column in range(COLUMNS):
 			var empty := Panel.new()
 			empty.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			empty.position = Vector2(column * (SLOT_SIZE + SLOT_GAP), row * (SLOT_SIZE + SLOT_GAP))
+			empty.position = Vector2(column * (SLOT_SIZE + SLOT_GAP), (row + 1) * (SLOT_SIZE + SLOT_GAP))
 			empty.size = Vector2(SLOT_SIZE, SLOT_SIZE)
 			empty.add_theme_stylebox_override("panel", _make_style(Color(0.08, 0.08, 0.10, 0.35), 0.12))
-			_root.add_child(empty)
+			add_child(empty)
 
 
 func _create_slot(action: Dictionary, code: int, cell: Vector2i) -> void:
 	var slot := Panel.new()
 	slot.mouse_filter = Control.MOUSE_FILTER_STOP
-	slot.position = Vector2(cell.x * (SLOT_SIZE + SLOT_GAP), cell.y * (SLOT_SIZE + SLOT_GAP))
+	slot.position = Vector2(cell.x * (SLOT_SIZE + SLOT_GAP), (cell.y + 1) * (SLOT_SIZE + SLOT_GAP))
 	slot.size = Vector2(SLOT_SIZE, SLOT_SIZE)
 	slot.add_theme_stylebox_override("panel", _make_style(_slot_color(action), 0.55))
 	slot.gui_input.connect(_on_slot_gui_input.bind(action))
-	_root.add_child(slot)
+	add_child(slot)
 
 	# The icon picture. Without a PNG file, a short name on one line is shown instead.
 	var icon: Texture2D = ICONS.get_icon(str(action["id"]))
@@ -150,15 +140,13 @@ func _create_slot(action: Dictionary, code: int, cell: Vector2i) -> void:
 		picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		picture.stretch_mode = TextureRect.STRETCH_SCALE
 		slot.add_child(picture)
-		picture.set_anchors_preset(Control.PRESET_FULL_RECT)
-		picture.offset_left = 1.0
-		picture.offset_top = 1.0
-		picture.offset_right = -1.0
-		picture.offset_bottom = -1.0
+		picture.position = Vector2(1.0, 1.0)
+		picture.size = Vector2(SLOT_SIZE - 2.0, SLOT_SIZE - 2.0)
 	else:
 		var name_label := _make_label(str(action.get("short", action["label"])), 9, Color.WHITE)
 		slot.add_child(name_label)
-		name_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+		name_label.position = Vector2(0.0, 0.0)
+		name_label.size = Vector2(SLOT_SIZE, SLOT_SIZE)
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
@@ -179,17 +167,15 @@ func _create_slot(action: Dictionary, code: int, cell: Vector2i) -> void:
 	# Charges, bottom right.
 	var charge_label := _make_label("", 12, Color(1.0, 0.85, 0.5))
 	slot.add_child(charge_label)
-	charge_label.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	charge_label.offset_left = -22.0
-	charge_label.offset_top = -18.0
-	charge_label.offset_right = -3.0
-	charge_label.offset_bottom = -1.0
+	charge_label.position = Vector2(SLOT_SIZE - 25.0, SLOT_SIZE - 19.0)
+	charge_label.size = Vector2(22.0, 18.0)
 	charge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	# Seconds until the next charge, in the middle.
 	var cooldown_label := _make_label("", 16, Color.WHITE)
 	slot.add_child(cooldown_label)
-	cooldown_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cooldown_label.position = Vector2(0.0, 0.0)
+	cooldown_label.size = Vector2(SLOT_SIZE, SLOT_SIZE)
 	cooldown_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cooldown_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 

@@ -4,35 +4,24 @@
 # Each icon has the seconds remaining underneath. For now it shows the damage reduction
 # from Plenary Indulgence and Temperance, using the same icon as the hotbar.
 #
-# Move it with Buff Bar Anchor X / Y on the HealerActionController node in the Inspector
-# (0 to 1 across and down the screen).
+# Move and resize it with the sim's Move UI key (Alt), like the other HUD pieces.
 
-extends CanvasLayer
+extends HBoxContainer
 
 const ICONS = preload("res://scenes/healer_trainer/healer_icons.gd")
 
 const ICON_SIZE := 36.0
 
 var _controller
-var _row: HBoxContainer
 var _entries := {}
 
 
-func setup(controller, anchor_x: float, anchor_y: float) -> void:
+func setup(controller) -> void:
 	_controller = controller
-	layer = 48
-	_row = HBoxContainer.new()
-	_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_row.add_theme_constant_override("separation", 6)
-	add_child(_row)
-	_row.anchor_left = anchor_x
-	_row.anchor_right = anchor_x
-	_row.anchor_top = anchor_y
-	_row.anchor_bottom = anchor_y
-	_row.offset_left = 0.0
-	_row.offset_top = 0.0
-	_row.offset_right = 0.0
-	_row.offset_bottom = 0.0
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_theme_constant_override("separation", 6)
+	# A minimum size so there is something to grab when no buffs are active.
+	custom_minimum_size = Vector2(130.0, ICON_SIZE + 18.0)
 
 
 func _process(_delta: float) -> void:
@@ -55,7 +44,7 @@ func _create_entry(id: String, label_text: String) -> Dictionary:
 	var box := VBoxContainer.new()
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	box.add_theme_constant_override("separation", 0)
-	_row.add_child(box)
+	add_child(box)
 
 	var holder := Control.new()
 	holder.custom_minimum_size = Vector2(ICON_SIZE, ICON_SIZE)
@@ -70,7 +59,8 @@ func _create_entry(id: String, label_text: String) -> Dictionary:
 		picture.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		picture.stretch_mode = TextureRect.STRETCH_SCALE
 		holder.add_child(picture)
-		picture.set_anchors_preset(Control.PRESET_FULL_RECT)
+		picture.position = Vector2(0.0, 0.0)
+		picture.size = Vector2(ICON_SIZE, ICON_SIZE)
 	else:
 		# No icon file yet: a plain blue square with the first letters of the name.
 		var panel := Panel.new()
@@ -82,10 +72,12 @@ func _create_entry(id: String, label_text: String) -> Dictionary:
 		style.set_corner_radius_all(4)
 		panel.add_theme_stylebox_override("panel", style)
 		holder.add_child(panel)
-		panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+		panel.position = Vector2(0.0, 0.0)
+		panel.size = Vector2(ICON_SIZE, ICON_SIZE)
 		var name_label := _make_label(label_text.substr(0, 4), 10, Color.WHITE)
 		panel.add_child(name_label)
-		name_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+		name_label.position = Vector2(0.0, 0.0)
+		name_label.size = Vector2(ICON_SIZE, ICON_SIZE)
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 
