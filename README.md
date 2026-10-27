@@ -1,5 +1,7 @@
 # Waju-Sims
 
+* This is a fork of the sim Waju built (Waju-sims). All credit goes to Waju. I'm just adding some extra features and functionality to practice healing.
+
 Download links:
 
 DMU: https://github.com/WCGH/Waju-Sims/releases/tag/dmu-0.3.x

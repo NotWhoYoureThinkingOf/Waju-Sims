@@ -1,4 +1,4 @@
-# Healer Trainer - Slice 16: 3D effects
+# Healer Trainer - Slice 17: screen effects, heal wave, Cure III
 #
 # Listens for the healer keys the player set in the Escape menu (modifier
 # combinations like Shift+3 work) and performs the matching action from
@@ -55,7 +55,8 @@ const VISUALS = preload("res://scenes/healer_trainer/healer_visuals.gd")
 @export var hotbar_bottom_offset := 8.0
 ## Where the hotbar STARTS: moves it left (negative) or right (positive), in pixels.
 @export var hotbar_offset_x := 0.0
-## Show the 3D attack effects (Kefka's ice and lightning for now). They are decoration only.
+## Show the visual effects: Kefka's ice and lightning, the Grand Cross / Inferno / Tsunami screen
+## effects, and the glow when a party-wide heal goes out. They are decoration only.
 @export var show_visual_effects := true
 ## How strong the visual effects are. 0 = none, 1 = normal, 2 = a lot.
 @export_range(0.0, 2.0, 0.05) var visual_intensity := 1.0
@@ -63,6 +64,10 @@ const VISUALS = preload("res://scenes/healer_trainer/healer_visuals.gd")
 @export var reduced_flash := false
 ## How much bigger Neo Exdeath is drawn. 1 = the sim's original size, 2 = double.
 @export_range(0.5, 4.0, 0.1) var neo_scale := 2.0
+## How far Neo Exdeath is moved down. Raise it if he still looks too high.
+@export_range(0.0, 5.0, 0.1) var neo_lower := 1.2
+## How much bigger his ring of orbs is drawn. 1 = the sim's original size.
+@export_range(0.5, 3.0, 0.05) var neo_ring_scale := 1.35
 ## Show the buff bar (damage reduction effects on you, with time left).
 @export var show_buff_bar := true
 ## Where the buff bar STARTS: 0 to 1 across the screen, and 0 to 1 down the screen.
@@ -71,6 +76,7 @@ const VISUALS = preload("res://scenes/healer_trainer/healer_visuals.gd")
 
 var _control_menu: CanvasLayer
 var _hotbar
+var _visuals
 var _buff_bar
 var _health: PartyHealthController
 var _player: CharacterBody3D
@@ -122,12 +128,14 @@ func _ready() -> void:
 		_buff_bar = BUFF_BAR.new()
 		_buff_bar.setup(self)
 		_make_movable("healer_buff_bar", _buff_bar, "Buffs", [buff_bar_anchor_x, buff_bar_anchor_y], 48)
-	var visuals = VISUALS.new()
-	visuals.effects_enabled = show_visual_effects
-	visuals.intensity = visual_intensity
-	visuals.reduced_flash = reduced_flash
-	visuals.neo_scale = neo_scale
-	add_child(visuals)
+	_visuals = VISUALS.new()
+	_visuals.effects_enabled = show_visual_effects
+	_visuals.intensity = visual_intensity
+	_visuals.reduced_flash = reduced_flash
+	_visuals.neo_scale = neo_scale
+	_visuals.neo_lower = neo_lower
+	_visuals.neo_ring_scale = neo_ring_scale
+	add_child(_visuals)
 	var keybinds: Dictionary = SavedVariables.get_keybinds()
 	for action: Dictionary in HEALER_KEYBINDS.ACTIONS:
 		var code: int = keybinds.get(action["id"], 0)
@@ -278,6 +286,8 @@ func _apply_heal(action: Dictionary, target: String) -> void:
 			if health.get_hp(key) > hp_before:
 				healed += 1
 		print("[HealerTrainer] %s: healed %d party members (up to +%d each)" % [action["label"], healed, int(action["amount"])])
+		if _visuals != null:
+			_visuals.play_party_heal()
 		return
 	var before: float = health.get_hp(target)
 	health.heal(target, float(action["amount"]))

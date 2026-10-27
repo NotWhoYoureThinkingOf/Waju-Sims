@@ -18,6 +18,8 @@ extends Node
 class_name PartyHealthController
 
 signal health_changed(role_key: String, current: float, maximum: float)
+## Sent when a timeline hit lands, so the visual effects can play with it.
+signal raidwide_hit(label: String, effect: String)
 
 const ROLE_KEYS := ["t1", "t2", "h1", "h2", "m1", "m2", "r1", "r2"]
 const ANIM_NODE_NAME := "P4Anim"
@@ -68,7 +70,7 @@ func _process(delta: float) -> void:
 	while _next_event < TIMELINE.EVENTS.size() and pos >= float(TIMELINE.EVENTS[_next_event]["time"]):
 		var event: Dictionary = TIMELINE.EVENTS[_next_event]
 		_next_event += 1
-		damage_all(float(event["damage"]) * damage_scale, str(event["label"]))
+		damage_all(float(event["damage"]) * damage_scale, str(event["label"]), str(event.get("effect", "")))
 
 
 func reset_all() -> void:
@@ -81,7 +83,8 @@ func reset_all() -> void:
 		_push_to_ui(key)
 
 
-func damage_all(amount: float, label := "Party hit") -> void:
+func damage_all(amount: float, label := "Party hit", effect := "") -> void:
+	raidwide_hit.emit(label, effect)
 	var multiplier := get_damage_multiplier()
 	print("[HealerTrainer] %s: %d damage, %d%% mitigation -> %d each" % [label, int(amount), int(round((1.0 - multiplier) * 100.0)), int(amount * multiplier)])
 	for key in ROLE_KEYS:
