@@ -1500,6 +1500,8 @@ script = ExtResource("28_ylgvm")
 
 [node name="HealerActionController" type="Node" parent="Controllers" unique_id=1515359150]
 script = ExtResource("29_da1s0")
+visual_intensity = 2.0
+neo_scale = 1.5
 
 [node name="EncounterController" parent="." unique_id=787222493 instance=ExtResource("29_bgfc6")]
 unique_name_in_owner = true
@@ -1624,7 +1626,7 @@ visible = false
 [node name="ThunderRing" type="Node3D" parent="Enemies/Kefka/OrbRings" unique_id=1859939782]
 
 [node name="Ring" type="MeshInstance3D" parent="Enemies/Kefka/OrbRings/ThunderRing" unique_id=1255465473]
-transform = Transform3D(0.44182968, -0.034772743, 0.8964245, 0.078459054, 0.99691653, 0, -0.8936608, 0.07033262, 0.44319606, 0, 7.231963, 0)
+transform = Transform3D(0.9009441, -0.07090583, 0.4281016, 0.078459054, 0.9969165, 0, -0.4267817, 0.033588443, 0.90373033, 0, 7.231963, 0)
 mesh = SubResource("TorusMesh_hsd6q")
 skeleton = NodePath("")
 

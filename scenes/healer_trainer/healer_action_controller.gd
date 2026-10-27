@@ -1,4 +1,4 @@
-# Healer Trainer - Slice 15: movable and resizable HUD
+# Healer Trainer - Slice 16: 3D effects
 #
 # Listens for the healer keys the player set in the Escape menu (modifier
 # combinations like Shift+3 work) and performs the matching action from
@@ -29,6 +29,7 @@ const HEALER_KEYBINDS = preload("res://scenes/healer_trainer/healer_keybinds.gd"
 const HOTBAR = preload("res://scenes/healer_trainer/healer_hotbar.gd")
 const BUFF_BAR = preload("res://scenes/healer_trainer/healer_buff_bar.gd")
 const MOVABLE = preload("res://scenes/healer_trainer/healer_movable.gd")
+const VISUALS = preload("res://scenes/healer_trainer/healer_visuals.gd")
 
 @export var enabled := true
 ## The global recast in seconds (your in-game 2.31).
@@ -54,6 +55,14 @@ const MOVABLE = preload("res://scenes/healer_trainer/healer_movable.gd")
 @export var hotbar_bottom_offset := 8.0
 ## Where the hotbar STARTS: moves it left (negative) or right (positive), in pixels.
 @export var hotbar_offset_x := 0.0
+## Show the 3D attack effects (Kefka's ice and lightning for now). They are decoration only.
+@export var show_visual_effects := true
+## How strong the visual effects are. 0 = none, 1 = normal, 2 = a lot.
+@export_range(0.0, 2.0, 0.05) var visual_intensity := 1.0
+## Replaces quick flashing effects with a soft fade, for anyone sensitive to flashing.
+@export var reduced_flash := false
+## How much bigger Neo Exdeath is drawn. 1 = the sim's original size, 2 = double.
+@export_range(0.5, 4.0, 0.1) var neo_scale := 2.0
 ## Show the buff bar (damage reduction effects on you, with time left).
 @export var show_buff_bar := true
 ## Where the buff bar STARTS: 0 to 1 across the screen, and 0 to 1 down the screen.
@@ -113,6 +122,12 @@ func _ready() -> void:
 		_buff_bar = BUFF_BAR.new()
 		_buff_bar.setup(self)
 		_make_movable("healer_buff_bar", _buff_bar, "Buffs", [buff_bar_anchor_x, buff_bar_anchor_y], 48)
+	var visuals = VISUALS.new()
+	visuals.effects_enabled = show_visual_effects
+	visuals.intensity = visual_intensity
+	visuals.reduced_flash = reduced_flash
+	visuals.neo_scale = neo_scale
+	add_child(visuals)
 	var keybinds: Dictionary = SavedVariables.get_keybinds()
 	for action: Dictionary in HEALER_KEYBINDS.ACTIONS:
 		var code: int = keybinds.get(action["id"], 0)
