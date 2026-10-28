@@ -20,6 +20,9 @@
 #               (everyone in the party, no target needed).
 #   mitigation = (mitigation only) damage reduction, 0.10 = 10%.
 #   duration  = (mitigation only) seconds the reduction lasts.
+#   hot       = (optional) a heal over time added by the action, like
+#               {"amount": 8.0, "duration": 15.0, "interval": 3.0}: heals "amount" every
+#               "interval" seconds for "duration" seconds.
 #   uses      = (optional) shared resources the action spends, like {"lily": 1}.
 #               The resources themselves are defined in RESOURCES below.
 #   charges   = (optional) how many charges the action holds. Leave out for no limit.
@@ -41,6 +44,7 @@ const ACTIONS := [
 	{"id": "heal_st_cast_1", "label": "Cure II", "short": "Cure II", "default": KEY_2, "kind": "cast", "gcd": true, "cast_time": 1.85, "amount": 60.0},
 	{"id": "heal_aoe_instant_1", "label": "Afflatus Rapture", "short": "Rapture", "default": KEY_5, "kind": "instant", "gcd": true, "uses": {"lily": 1}, "target": "party", "cast_time": 0.0, "amount": 20.0},
 	{"id": "heal_aoe_cast_1", "label": "Medica", "short": "Medica", "default": KEY_6, "kind": "cast", "gcd": true, "target": "party", "cast_time": 1.85, "amount": 40.0},
+	{"id": "heal_aoe_cast_3", "label": "Medica III", "short": "Medica III", "default": KEY_2 | KEY_MASK_CTRL, "kind": "cast", "gcd": true, "target": "party", "cast_time": 1.85, "amount": 25.0, "hot": {"amount": 8.0, "duration": 15.0, "interval": 3.0}},
 	{"id": "heal_aoe_cast_2", "label": "Cure III", "short": "Cure III", "default": KEY_8 | KEY_MASK_CTRL, "kind": "cast", "gcd": true, "target": "party", "cast_time": 1.85, "amount": 60.0},
 	{"id": "mit_plenary", "label": "Plenary Indulgence", "short": "Plenary", "default": KEY_7 | KEY_MASK_CTRL, "kind": "mitigation", "gcd": false, "target": "party", "mitigation": 0.10, "duration": 10.0, "charges": 1, "cooldown": 60.0, "cast_time": 0.0, "amount": 0.0},
 	{"id": "mit_temperance", "label": "Temperance", "short": "Temp.", "default": KEY_8, "kind": "mitigation", "gcd": false, "target": "party", "mitigation": 0.10, "duration": 20.0, "charges": 1, "cooldown": 120.0, "cast_time": 0.0, "amount": 0.0},

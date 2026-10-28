@@ -10,7 +10,7 @@
 #   - Grand Cross, Inferno and Tsunami wash a see-through effect over the whole screen
 #     for about three seconds. The middle stays clearer, so you never lose sight of your
 #     character.
-#   - Flood of Naughts fires bright lasers from Neo Exdeath at every party member.
+#   - Flood of Naughts fires bright laser lines from Neo Exdeath across the whole arena.
 #   - Every party-wide heal sends a glowing ring out from you, with sparkles on the party.
 #   - Neo Exdeath is drawn bigger, a little lower, with a bigger ring of orbs.
 #
@@ -22,6 +22,11 @@
 extends Node
 
 const TIMELINE = preload("res://scenes/healer_trainer/healer_damage_timeline.gd")
+
+# The arena the Flood of Naughts lasers sweep across (the middle of the floor, and how far
+# the lasers reach). Change the radius if the lasers land outside the arena or fall short.
+const ARENA_CENTER := Vector3(0.0, 0.0, 0.0)
+const ARENA_RADIUS := 22.0
 
 # How long each screen effect lasts, in seconds: fading in, holding, fading out.
 const OVERLAY_TIMES := {
@@ -310,13 +315,13 @@ func _sparkles(at: Vector3) -> void:
 	get_tree().create_timer(1.2).timeout.connect(particles.queue_free)
 
 
-# Flood of Naughts: bright lasers from Neo Exdeath to every party member, about three seconds.
+# Flood of Naughts: bright laser lines from Neo Exdeath sweeping across the whole arena,
+# about three seconds. They are not aimed at anyone.
 func play_flood_lasers() -> void:
 	if not effects_enabled or intensity <= 0.0:
 		return
 	var neo := get_tree().root.find_child("NeoExdeath", true, false) as Node3D
-	var party_controller := get_tree().root.find_child("PartyController", true, false)
-	if neo == null or party_controller == null:
+	if neo == null:
 		return
 
 	var origin := neo.global_position + Vector3(0.0, 4.0, 0.0)
@@ -325,19 +330,17 @@ func play_flood_lasers() -> void:
 	var root := Node3D.new()
 	add_child(root)
 
-	var beams := maxi(1, int(round(2.0 * intensity)))
+	var beams := maxi(4, int(round(16.0 * intensity)))
 	if reduced_flash:
-		beams = maxi(1, beams - 1)
-	var party: Dictionary = party_controller.party
-	for key: String in party:
-		var member := party[key] as Node3D
-		if member == null:
-			continue
-		for i in range(beams):
-			var target := member.global_position + Vector3(randf_range(-1.2, 1.2), 0.9, randf_range(-1.2, 1.2))
-			root.add_child(_segment(origin, target, 0.09, core))
-			root.add_child(_segment(origin, target, 0.35, halo))
-		root.add_child(_disc(member.global_position, 1.6, halo))
+		beams = maxi(4, int(beams / 2.0))
+	for i in range(beams):
+		# Spread the beams evenly around and across the arena.
+		var angle := TAU * (float(i) + randf()) / float(beams)
+		var distance := ARENA_RADIUS * sqrt(randf())
+		var ground := ARENA_CENTER + Vector3(cos(angle) * distance, 0.05, sin(angle) * distance)
+		root.add_child(_segment(origin, ground, 0.09, core))
+		root.add_child(_segment(origin, ground, 0.35, halo))
+		root.add_child(_disc(ground, 1.2, halo))
 
 	var peak := 0.6 if reduced_flash else 1.0
 	_laser_cycle(core, peak)

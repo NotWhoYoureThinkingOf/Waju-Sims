@@ -1,4 +1,4 @@
-# Healer Trainer - Slice 17: screen effects, heal wave, Cure III
+# Healer Trainer - Slice 19: heal over time
 #
 # Listens for the healer keys the player set in the Escape menu (modifier
 # combinations like Shift+3 work) and performs the matching action from
@@ -209,7 +209,9 @@ func get_active_buffs() -> Array:
 	var health := _get_health()
 	if health == null:
 		return []
-	return health.get_mitigations()
+	var buffs: Array = health.get_mitigations()
+	buffs.append_array(health.get_hots(Global.player_role_key))
+	return buffs
 
 
 # Used by the hotbar to draw charges, cooldowns and the global recast on each icon.
@@ -285,12 +287,18 @@ func _apply_heal(action: Dictionary, target: String) -> void:
 			health.heal(key, float(action["amount"]))
 			if health.get_hp(key) > hp_before:
 				healed += 1
-		print("[HealerTrainer] %s: healed %d party members (up to +%d each)" % [action["label"], healed, int(action["amount"])])
+		if action.has("hot"):
+			var hot: Dictionary = action["hot"]
+			health.add_hot_all(str(action["id"]), str(action["label"]), float(hot["amount"]), float(hot["duration"]), float(hot.get("interval", 3.0)))
+		print("[HealerTrainer] %s: healed %d party members (up to +%d each)%s" % [action["label"], healed, int(action["amount"]), " and started a heal over time" if action.has("hot") else ""])
 		if _visuals != null:
 			_visuals.play_party_heal()
 		return
 	var before: float = health.get_hp(target)
 	health.heal(target, float(action["amount"]))
+	if action.has("hot"):
+		var target_hot: Dictionary = action["hot"]
+		health.add_hot(target, str(action["id"]), str(action["label"]), float(target_hot["amount"]), float(target_hot["duration"]), float(target_hot.get("interval", 3.0)))
 	var after: float = health.get_hp(target)
 	print("[HealerTrainer] %s on %s: %d -> %d" % [action["label"], target, int(before), int(after)])
 

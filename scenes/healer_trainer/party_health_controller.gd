@@ -38,6 +38,7 @@ var _party_list: PartyList
 var _next_event := 0
 var _dead := {}
 var _element_hits := {}
+var _hots := {}
 var _mitigations := {}
 
 
@@ -51,6 +52,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_tick_mitigations(delta)
+	_tick_hots(delta)
 	# Find the things we need. They may not exist for the first few frames.
 	if _anim == null:
 		_anim = get_tree().root.find_child(ANIM_NODE_NAME, true, false) as AnimationPlayer
@@ -77,6 +79,7 @@ func reset_all() -> void:
 	_next_event = 0
 	_dead.clear()
 	_element_hits.clear()
+	_hots.clear()
 	_mitigations.clear()
 	for key in ROLE_KEYS:
 		_hp[key] = max_hp
@@ -186,6 +189,42 @@ func _report_death(role_key: String) -> void:
 
 func is_dead(role_key: String) -> bool:
 	return _dead.has(role_key)
+
+
+# Slice 19: heal over time. A HoT heals "amount" every "interval" seconds for "duration"
+# seconds, starting one interval after it is applied. Using the same one again refreshes it.
+func add_hot(role_key: String, id: String, label: String, amount: float, duration: float, interval := 3.0) -> void:
+	if not _hp.has(role_key) or _dead.has(role_key):
+		return
+	_hots["%s|%s" % [role_key, id]] = {
+		"role": role_key, "id": id, "label": label, "amount": amount,
+		"interval": interval, "duration": duration, "elapsed": 0.0, "next_tick": interval,
+	}
+
+
+func add_hot_all(id: String, label: String, amount: float, duration: float, interval := 3.0) -> void:
+	for key in ROLE_KEYS:
+		add_hot(key, id, label, amount, duration, interval)
+
+
+# The heals over time on one party member, each with "id", "label" and "left" (seconds).
+func get_hots(role_key: String) -> Array:
+	var result := []
+	for hot: Dictionary in _hots.values():
+		if hot["role"] == role_key:
+			result.append({"id": hot["id"], "label": hot["label"], "left": float(hot["duration"]) - float(hot["elapsed"])})
+	return result
+
+
+func _tick_hots(delta: float) -> void:
+	for key: String in _hots.keys():
+		var hot: Dictionary = _hots[key]
+		hot["elapsed"] = float(hot["elapsed"]) + delta
+		while float(hot["next_tick"]) <= float(hot["elapsed"]) + 0.0001 and float(hot["next_tick"]) <= float(hot["duration"]) + 0.0001:
+			hot["next_tick"] = float(hot["next_tick"]) + float(hot["interval"])
+			heal(str(hot["role"]), float(hot["amount"]))
+		if float(hot["elapsed"]) >= float(hot["duration"]) or _dead.has(hot["role"]):
+			_hots.erase(key)
 
 
 func get_hp(role_key: String) -> float:
