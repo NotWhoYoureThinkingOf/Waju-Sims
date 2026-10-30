@@ -1627,7 +1627,7 @@ visible = false
 [node name="ThunderRing" type="Node3D" parent="Enemies/Kefka/OrbRings" unique_id=1859939782]
 
 [node name="Ring" type="MeshInstance3D" parent="Enemies/Kefka/OrbRings/ThunderRing" unique_id=1255465473]
-transform = Transform3D(0.22492592, -0.017702052, -0.9742148, 0.07845905, 0.9969165, 0, 0.9712112, -0.07643597, 0.22562154, 0, 7.231963, 0)
+transform = Transform3D(-0.5891915, 0.046370376, -0.8066611, 0.07845904, 0.9969164, 0, 0.80417407, -0.063289866, -0.5910137, 0, 7.231963, 0)
 mesh = SubResource("TorusMesh_hsd6q")
 skeleton = NodePath("")
 

@@ -1,4 +1,4 @@
-# Healer Trainer - Slices 16 to 18: visual effects
+# Healer Trainer - Slices 16 to 21: visual effects
 #
 # Purely decoration. These effects are drawn on top of the sim and never touch the
 # mechanics: no collision shapes, no fail list, no damage. They exist to add to the
@@ -70,22 +70,47 @@ float fbm(vec2 p) {
 }
 """
 
-# Grand Cross: a pale lavender haze with streaks of light flying out from the middle,
-# warming to orange toward the corners.
+# Grand Cross: reality bending. The picture is slightly distorted (a gentle pull toward the
+# middle and a slow shimmer, no turning) with a slight blur, under a lavender haze with swirling arms of violet light and streaks flying
+# outward, warming to orange toward the corners. The middle stays clearer.
 const SHADER_COSMIC := """
+uniform sampler2D screen_texture : hint_screen_texture, repeat_disable, filter_linear;
+
 void fragment() {
 	vec2 c = (UV - vec2(0.5)) * vec2(1.77, 1.0);
 	float r = length(c);
-	vec2 dir = c / max(r, 0.0001);
-	float streak = pow(vnoise(dir * 5.0 + vec2(TIME * 1.2, 0.0)), 2.2);
-	float haze = fbm(c * 3.0 + vec2(TIME * 0.25, -TIME * 0.15));
-	float edge = smoothstep(0.15, 0.95, r);
-	vec3 cool = vec3(0.82, 0.78, 1.0);
-	vec3 warm = vec3(1.0, 0.55, 0.42);
-	vec3 col = mix(cool, warm, smoothstep(0.55, 1.1, r));
-	float pulse = mix(0.85 + 0.15 * sin(TIME * 6.0), 1.0, calm);
-	float alpha = (0.10 + 0.35 * streak * edge + 0.25 * haze * edge) * strength * pulse;
-	COLOR = vec4(col, clamp(alpha, 0.0, 0.7));
+	float angle = atan(c.y, c.x);
+	float edge = smoothstep(0.1, 0.95, r);
+	float amount = strength * (1.0 - 0.6 * calm);
+
+	// Distort: a slight steady pull toward the middle plus a slow heat-haze shimmer.
+	// Nothing turns or swings from side to side.
+	vec2 dir = SCREEN_UV - vec2(0.5);
+	vec2 shimmer = vec2(fbm(c * 3.0 + vec2(TIME * 0.15, 0.0)), fbm(c * 3.0 + vec2(5.2, TIME * 0.12))) - vec2(0.5);
+	vec2 warped = vec2(0.5) + dir * (1.0 - amount * 0.05 * edge) + shimmer * 0.014 * amount * edge;
+
+	// Blur: average a few samples stretched out from the middle.
+	vec3 blurred = vec3(0.0);
+	for (int i = 0; i < 6; i++) {
+		float k = float(i) / 5.0;
+		vec2 p = vec2(0.5) + (warped - vec2(0.5)) * (1.0 - amount * 0.07 * k * edge);
+		blurred += texture(screen_texture, p).rgb;
+	}
+	blurred /= 6.0;
+
+	// Haze, swirling arms and streaks of cosmic light.
+	float haze = fbm(c * 2.5 + vec2(TIME * 0.2, -TIME * 0.12));
+	float arms = 0.5 + 0.5 * sin(angle * 3.0 + r * 12.0 - TIME * mix(2.2, 0.7, calm));
+	float streak = pow(vnoise(vec2(cos(angle), sin(angle)) * 5.0 + vec2(TIME * 1.0, 0.0)), 2.2);
+	vec3 cool = vec3(0.80, 0.74, 1.0);
+	vec3 warm = vec3(1.0, 0.55, 0.45);
+	vec3 tint = mix(cool, warm, smoothstep(0.6, 1.15, r));
+	tint = mix(tint, vec3(0.45, 0.35, 0.8), arms * 0.35 * edge);
+	float mist = 0.25 + 0.3 * haze * edge + 0.2 * arms * edge + 0.2 * streak * edge;
+	vec3 col = mix(blurred, tint, clamp(mist, 0.0, 0.8));
+	float pulse = mix(0.9 + 0.1 * sin(TIME * 5.0), 1.0, calm);
+	float alpha = clamp(strength * (0.4 + 0.5 * edge) * pulse, 0.0, 0.85);
+	COLOR = vec4(col, alpha);
 }
 """
 

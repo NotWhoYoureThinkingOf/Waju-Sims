@@ -28,9 +28,13 @@ const TIMELINE = preload("res://scenes/healer_trainer/healer_damage_timeline.gd"
 const DOUBLE_HIT_WINDOW := 1.5
 
 @export var enabled := true
-@export var max_hp := 100.0
 ## Multiplies all timeline damage. 1.0 = as written, 0.5 = half, 1.5 = one and a half times.
 @export var damage_scale := 1.0
+## The other healer's help. A moment after each raidwide, they heal back this fraction of the
+## HP each person just lost. 0 = no help at all. About 0.25 to 0.33 matches the real fight.
+@export_range(0.0, 1.0, 0.01) var support_heal_fraction := 0.25
+## Seconds after the hit before the other healer's heal lands.
+@export_range(0.0, 6.0, 0.1) var support_heal_delay := 2.0
 
 var _hp := {}
 var _anim: AnimationPlayer
@@ -39,6 +43,7 @@ var _next_event := 0
 var _dead := {}
 var _element_hits := {}
 var _hots := {}
+var _support_queue: Array = []
 var _mitigations := {}
 
 
@@ -53,6 +58,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_tick_mitigations(delta)
 	_tick_hots(delta)
+	_tick_support(delta)
 	# Find the things we need. They may not exist for the first few frames.
 	if _anim == null:
 		_anim = get_tree().root.find_child(ANIM_NODE_NAME, true, false) as AnimationPlayer
@@ -63,7 +69,7 @@ func _process(delta: float) -> void:
 		if _party_list == null:
 			return
 		reset_all()
-		print("[HealerTrainer] Party health ready (8 members at %d HP)" % int(max_hp))
+		print("[HealerTrainer] Party health ready (real max HP for each of the 8 members)")
 
 	# Only read the existing timeline. Never change it.
 	if not _anim.is_playing():
@@ -72,7 +78,8 @@ func _process(delta: float) -> void:
 	while _next_event < TIMELINE.EVENTS.size() and pos >= float(TIMELINE.EVENTS[_next_event]["time"]):
 		var event: Dictionary = TIMELINE.EVENTS[_next_event]
 		_next_event += 1
-		damage_all(float(event["damage"]) * damage_scale, str(event["label"]), str(event.get("effect", "")))
+		var info := _event_info(event)
+		damage_all(float(info["damage"]) * damage_scale, str(info["label"]), str(event.get("effect", "")))
 
 
 func reset_all() -> void:
@@ -80,9 +87,10 @@ func reset_all() -> void:
 	_dead.clear()
 	_element_hits.clear()
 	_hots.clear()
+	_support_queue.clear()
 	_mitigations.clear()
 	for key in ROLE_KEYS:
-		_hp[key] = max_hp
+		_hp[key] = max_hp_of(key)
 		_push_to_ui(key)
 
 
@@ -90,8 +98,32 @@ func damage_all(amount: float, label := "Party hit", effect := "") -> void:
 	raidwide_hit.emit(label, effect)
 	var multiplier := get_damage_multiplier()
 	print("[HealerTrainer] %s: %d damage, %d%% mitigation -> %d each" % [label, int(amount), int(round((1.0 - multiplier) * 100.0)), int(amount * multiplier)])
+	var hp_before := {}
+	for key in ROLE_KEYS:
+		hp_before[key] = _hp.get(key, 0.0)
 	for key in ROLE_KEYS:
 		apply_damage(key, amount)
+	_queue_support_heals(hp_before)
+
+
+# The other healer (the Sage) heals part of what each person lost, a moment after the hit.
+func _queue_support_heals(hp_before: Dictionary) -> void:
+	if support_heal_fraction <= 0.0:
+		return
+	for key in ROLE_KEYS:
+		var lost := float(hp_before[key]) - float(_hp.get(key, 0.0))
+		if lost > 0.0 and not _dead.has(key):
+			_support_queue.append({"role": key, "amount": lost * support_heal_fraction, "delay": support_heal_delay})
+	print("[HealerTrainer] The other healer will heal back %d%% of the HP lost, in %.1f s" % [int(round(support_heal_fraction * 100.0)), support_heal_delay])
+
+
+func _tick_support(delta: float) -> void:
+	for i in range(_support_queue.size() - 1, -1, -1):
+		var entry: Dictionary = _support_queue[i]
+		entry["delay"] = float(entry["delay"]) - delta
+		if float(entry["delay"]) <= 0.0:
+			heal(str(entry["role"]), float(entry["amount"]))
+			_support_queue.remove_at(i)
 
 
 func apply_damage(role_key: String, amount: float, ignore_mitigation := false) -> void:
@@ -111,7 +143,7 @@ func heal(role_key: String, amount: float) -> float:
 	if not _hp.has(role_key) or _dead.has(role_key):
 		return 0.0
 	var before: float = _hp[role_key]
-	_hp[role_key] = minf(before + amount, max_hp)
+	_hp[role_key] = minf(before + amount, max_hp_of(role_key))
 	_push_to_ui(role_key)
 	return _hp[role_key] - before
 
@@ -171,7 +203,7 @@ func _hit_by_spell(role_key: String, spell: String, info: Dictionary) -> void:
 		_element_hits[role_key] = times
 	if lethal:
 		print("[HealerTrainer] %s was hit by both ice and lightning (%s): lethal" % [role_name, spell])
-		apply_damage(role_key, max_hp, true)
+		apply_damage(role_key, max_hp_of(role_key), true)
 		return
 	var amount := float(info["damage"]) * damage_scale
 	print("[HealerTrainer] %s hit by %s: %d damage -> %d after mitigation" % [role_name, spell, int(amount), int(amount * get_damage_multiplier())])
@@ -227,11 +259,31 @@ func _tick_hots(delta: float) -> void:
 			_hots.erase(key)
 
 
+# A party member's real maximum HP (see healer_damage_timeline.gd).
+func max_hp_of(role_key: String) -> float:
+	return float(TIMELINE.MAX_HP.get(role_key, 200000.0))
+
+
+# The damage and name of a timeline hit. Chaos hits for more or less depending on whether
+# the sim picked Inferno or Tsunami for that cast.
+func _event_info(event: Dictionary) -> Dictionary:
+	if not event.has("damage_by"):
+		return {"damage": event["damage"], "label": event["label"]}
+	var sequence := get_tree().root.find_child("P4Seq", true, false)
+	var inferno_first := true
+	if sequence != null:
+		inferno_first = bool(sequence.get("inferno_first"))
+	var is_inferno := (str(event.get("effect", "")) == "chaos_1") == inferno_first
+	var by: Dictionary = event["damage_by"]
+	var kind := "inferno" if is_inferno else "tsunami"
+	return {"damage": by[kind], "label": "Inferno" if is_inferno else "Tsunami"}
+
+
 func get_hp(role_key: String) -> float:
 	return _hp.get(role_key, 0.0)
 
 
 func _push_to_ui(role_key: String) -> void:
 	if _party_list != null:
-		_party_list.set_member_health(role_key, _hp[role_key], max_hp)
-	health_changed.emit(role_key, _hp[role_key], max_hp)
+		_party_list.set_member_health(role_key, _hp[role_key], max_hp_of(role_key))
+	health_changed.emit(role_key, _hp[role_key], max_hp_of(role_key))
