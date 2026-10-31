@@ -1,4 +1,4 @@
-# Healer Trainer - Slice 24: self-heal when untargeted
+# Healer Trainer - Slice 25: Asylum (ground-targeted heal)
 #
 # Listens for the healer keys the player set in the Escape menu (modifier
 # combinations like Shift+3 work) and performs the matching action from
@@ -30,6 +30,7 @@ const HOTBAR = preload("res://scenes/healer_trainer/healer_hotbar.gd")
 const BUFF_BAR = preload("res://scenes/healer_trainer/healer_buff_bar.gd")
 const MOVABLE = preload("res://scenes/healer_trainer/healer_movable.gd")
 const VISUALS = preload("res://scenes/healer_trainer/healer_visuals.gd")
+const GROUND = preload("res://scenes/healer_trainer/healer_ground_heal.gd")
 
 @export var enabled := true
 ## The global recast in seconds (your in-game 2.31).
@@ -68,6 +69,9 @@ const VISUALS = preload("res://scenes/healer_trainer/healer_visuals.gd")
 @export_range(0.0, 5.0, 0.1) var neo_lower := 1.2
 ## How much bigger his ring of orbs is drawn. 1 = the sim's original size.
 @export_range(0.5, 3.0, 0.05) var neo_ring_scale := 1.35
+## How big Asylum is (its radius, in game units). The default is roughly half the arena across.
+## Change it if it does not feel right, then run the sim again.
+@export_range(2.0, 30.0, 0.5) var asylum_radius := 11.0
 ## Show the buff bar (damage reduction effects on you, with time left).
 @export var show_buff_bar := true
 ## Where the buff bar STARTS: 0 to 1 across the screen, and 0 to 1 down the screen.
@@ -77,6 +81,7 @@ const VISUALS = preload("res://scenes/healer_trainer/healer_visuals.gd")
 var _control_menu: CanvasLayer
 var _hotbar
 var _visuals
+var _ground
 var _buff_bar
 var _health: PartyHealthController
 var _player: CharacterBody3D
@@ -136,6 +141,12 @@ func _ready() -> void:
 	_visuals.neo_lower = neo_lower
 	_visuals.neo_ring_scale = neo_ring_scale
 	add_child(_visuals)
+	_ground = GROUND.new()
+	_ground.radius = asylum_radius
+	_ground.controller = self
+	_ground.control_menu = _control_menu
+	_ground.placed.connect(_on_ground_placed)
+	add_child(_ground)
 	var keybinds: Dictionary = SavedVariables.get_keybinds()
 	for action: Dictionary in HEALER_KEYBINDS.ACTIONS:
 		var code: int = keybinds.get(action["id"], 0)
@@ -232,7 +243,37 @@ func get_action_state(action: Dictionary) -> Dictionary:
 	return state
 
 
+# Asylum and other ground-targeted actions: the first press starts aiming, the second puts it
+# down. The charge (and so the cooldown) is only used when it is put down.
+func _use_ground_action(action: Dictionary) -> void:
+	if _ground == null:
+		return
+	if _ground.is_targeting():
+		_ground.confirm()
+		return
+	if _casting and not allow_abilities_while_casting:
+		print("[HealerTrainer] %s: cannot use abilities while casting" % action["label"])
+		return
+	if not _has_charge(action):
+		print("[HealerTrainer] %s: %s" % [action["label"], _charge_status(action)])
+		return
+	_ground.start(action)
+
+
+func _on_ground_placed(action: Dictionary) -> void:
+	_use_charge(action)
+
+
+# Used by Asylum for the little sparkles on each person it heals.
+func sparkle_at(at: Vector3) -> void:
+	if _visuals != null:
+		_visuals.sparkle_at(at)
+
+
 func _on_healer_action(action: Dictionary) -> void:
+	if str(action.get("kind", "instant")) == "ground":
+		_use_ground_action(action)
+		return
 	# Single-target actions need a selected party member; party-wide actions do not.
 	var target := ""
 	if action.get("target", "single") == "single":

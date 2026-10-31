@@ -1503,6 +1503,7 @@ script = ExtResource("29_da1s0")
 visual_intensity = 2.0
 neo_scale = 1.5
 neo_lower = 5.0
+asylum_radius = 27.5
 
 [node name="EncounterController" parent="." unique_id=787222493 instance=ExtResource("29_bgfc6")]
 unique_name_in_owner = true
@@ -1627,7 +1628,7 @@ visible = false
 [node name="ThunderRing" type="Node3D" parent="Enemies/Kefka/OrbRings" unique_id=1859939782]
 
 [node name="Ring" type="MeshInstance3D" parent="Enemies/Kefka/OrbRings/ThunderRing" unique_id=1255465473]
-transform = Transform3D(-0.5891915, 0.046370376, -0.8066611, 0.07845904, 0.9969164, 0, 0.80417407, -0.063289866, -0.5910137, 0, 7.231963, 0)
+transform = Transform3D(0.28841114, -0.022698449, 0.95723724, 0.07845903, 0.9969164, 0, -0.9542859, 0.07510393, 0.28930312, 0, 7.231963, 0)
 mesh = SubResource("TorusMesh_hsd6q")
 skeleton = NodePath("")
 

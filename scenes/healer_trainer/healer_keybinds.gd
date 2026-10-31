@@ -12,7 +12,8 @@
 #               Also available: KEY_MASK_CTRL and KEY_MASK_ALT.
 #               The player can change any key in the Escape menu at any time.
 #   kind      = "instant" (heals right away), "cast" (must stand still for cast_time),
-#               or "mitigation" (reduces damage taken, see mitigation and duration)
+#               "mitigation" (reduces damage taken, see mitigation and duration),
+#               or "ground" (press once to aim, again to put it down, like Asylum)
 #   gcd       = true if the action uses the global recast (the shared timer that stops you
 #               using two GCD actions back to back). false for off-global-recast actions.
 #               In the game: spells are gcd = true, abilities are gcd = false.
@@ -20,6 +21,8 @@
 #               (everyone in the party, no target needed).
 #   mitigation = (mitigation only) damage reduction, 0.10 = 10%.
 #   duration  = (mitigation only) seconds the reduction lasts.
+#   ground    = (ground-targeted actions only) {"duration": 24.0, "interval": 3.0}: the area stays
+#               for "duration" seconds and heals "amount" every "interval" seconds.
 #   hot       = (optional) a heal over time added by the action, like
 #               {"amount": 8.0, "duration": 15.0, "interval": 3.0}: heals "amount" every
 #               "interval" seconds for "duration" seconds.
@@ -49,5 +52,6 @@ const ACTIONS := [
 	{"id": "heal_aoe_cast_2", "label": "Cure III", "short": "Cure III", "default": KEY_8 | KEY_MASK_CTRL, "kind": "cast", "gcd": true, "target": "party", "cast_time": 1.85, "amount": 46201.0},
 	{"id": "mit_plenary", "label": "Plenary Indulgence", "short": "Plenary", "default": KEY_7 | KEY_MASK_CTRL, "kind": "mitigation", "gcd": false, "target": "party", "mitigation": 0.10, "duration": 10.0, "charges": 1, "cooldown": 60.0, "cast_time": 0.0, "amount": 0.0},
 	{"id": "mit_temperance", "label": "Temperance", "short": "Temp.", "default": KEY_8, "kind": "mitigation", "gcd": false, "target": "party", "mitigation": 0.10, "duration": 20.0, "charges": 1, "cooldown": 120.0, "cast_time": 0.0, "amount": 0.0},
+	{"id": "heal_ground_asylum", "label": "Asylum", "short": "Asylum", "default": KEY_4 | KEY_MASK_CTRL, "kind": "ground", "gcd": false, "target": "party", "charges": 1, "cooldown": 90.0, "cast_time": 0.0, "amount": 9163.0, "ground": {"duration": 24.0, "interval": 3.0}},
 	{"id": "heal_aoe_assize", "label": "Assize", "short": "Assize", "default": KEY_5 | KEY_MASK_SHIFT, "kind": "instant", "gcd": false, "target": "party", "charges": 1, "cooldown": 40.0, "cast_time": 0.0, "amount": 31496.0},
 ]

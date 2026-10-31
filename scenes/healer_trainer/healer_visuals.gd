@@ -312,6 +312,12 @@ func play_party_heal() -> void:
 				_sparkles(member.global_position)
 
 
+# A small burst of sparkles on one spot, used for each heal over time or Asylum tick.
+func sparkle_at(at: Vector3) -> void:
+	if effects_enabled and intensity > 0.0:
+		_sparkles(at)
+
+
 func _sparkles(at: Vector3) -> void:
 	var material := _glow_material(Color(0.85, 1.0, 1.0, 1.0))
 	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
