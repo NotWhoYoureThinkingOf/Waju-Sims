@@ -1,4 +1,4 @@
-# Healer Trainer - Slice 19: heal over time
+# Healer Trainer - Slice 24: self-heal when untargeted
 #
 # Listens for the healer keys the player set in the Escape menu (modifier
 # combinations like Shift+3 work) and performs the matching action from
@@ -460,7 +460,8 @@ func _get_health() -> PartyHealthController:
 
 
 # The target is the party member whose focus marker is showing (set by clicking their
-# row in the party list). Returns "" when nobody is selected.
+# row in the party list). With nobody selected, single-target heals go on yourself, like in
+# the game.
 func _get_target_role_key() -> String:
 	var party_controller := get_node_or_null("%PartyController")
 	if party_controller == null:
@@ -469,7 +470,7 @@ func _get_target_role_key() -> String:
 	for key: String in party:
 		if party[key].focus_icon.visible:
 			return key
-	return ""
+	return Global.player_role_key
 
 
 # A simple cast bar built in code, near the bottom centre of the screen.

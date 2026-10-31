@@ -16,6 +16,8 @@
 #   label     = name shown in the Output panel
 #   damage    = HP every party member loses, BEFORE your own mitigation and "Damage Scale"
 #   damage_by = (instead of damage) damage that depends on which Chaos attack it is
+#   special   = (optional) "flood": Flood of Naughts. Everyone with Beyond Death is dropped to
+#               1 HP and everyone with Allagan Field takes FLOOD_FIELD_DAMAGE.
 #   effect    = (optional) the screen effect that plays with the hit:
 #               "cosmic" (Grand Cross), "chaos_1" or "chaos_2" (Chaos's first and second cast,
 #               which are Inferno's fire or Tsunami's water depending on the order the sim
@@ -41,16 +43,22 @@ const MAX_HP := {
 	"r2": 205328.0,
 }
 
-# Grand Cross and Chaos are measured. Flood of Naughts and Ultima Upsurge are placeholders.
+# Grand Cross, Chaos, Flood of Naughts and Ultima Upsurge are measured or set from the real
+# fight. Ultima Upsurge is the damage seen with the owner's own 10% mitigation backed out.
+
+# Damage to each person holding Allagan Field when Flood of Naughts hits.
+const FLOOD_FIELD_DAMAGE := 60000.0
 const EVENTS := [
 	{"time": 12.4, "label": "Grand Cross", "damage": 155561.0, "effect": "cosmic"},
 	{"time": 17.4, "label": "Chaos", "damage_by": {"inferno": 181822.0, "tsunami": 112360.0}, "effect": "chaos_1"},
 	{"time": 27.3, "label": "Grand Cross", "damage": 140757.0, "effect": "cosmic"},
 	{"time": 32.4, "label": "Chaos", "damage_by": {"inferno": 181822.0, "tsunami": 112360.0}, "effect": "chaos_2"},
 	{"time": 42.4, "label": "Grand Cross", "damage": 116420.0, "effect": "cosmic"},
-	{"time": 55.0, "label": "Flood of Naughts", "damage": 140000.0, "effect": "flood"},
-	{"time": 81.6, "label": "Ultima Upsurge", "damage": 70000.0},
-	{"time": 120.3, "label": "Ultima Upsurge", "damage": 70000.0},
+	{"time": 55.0, "label": "Flood of Naughts", "special": "flood", "effect": "flood"},
+	# The Allagan Field debuffs run out 14 seconds after they are given (44.0 s) and burst.
+	{"time": 58.0, "label": "Allagan Field burst", "damage": 30000.0},
+	{"time": 81.6, "label": "Ultima Upsurge", "damage": 120001.0},
+	{"time": 120.3, "label": "Ultima Upsurge", "damage": 120001.0},
 ]
 
 # All of these are placeholders until they are measured.

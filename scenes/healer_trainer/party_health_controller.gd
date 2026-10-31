@@ -78,6 +78,9 @@ func _process(delta: float) -> void:
 	while _next_event < TIMELINE.EVENTS.size() and pos >= float(TIMELINE.EVENTS[_next_event]["time"]):
 		var event: Dictionary = TIMELINE.EVENTS[_next_event]
 		_next_event += 1
+		if str(event.get("special", "")) == "flood":
+			_flood_of_naughts(str(event["label"]), str(event.get("effect", "")))
+			continue
 		var info := _event_info(event)
 		damage_all(float(info["damage"]) * damage_scale, str(info["label"]), str(event.get("effect", "")))
 
@@ -104,6 +107,41 @@ func damage_all(amount: float, label := "Party hit", effect := "") -> void:
 	for key in ROLE_KEYS:
 		apply_damage(key, amount)
 	_queue_support_heals(hp_before)
+
+
+# Flood of Naughts: everyone with Beyond Death is dropped to 1 HP (and lives), everyone with
+# Allagan Field takes a smaller hit. Who has which comes from the sim's own debuffs.
+func _flood_of_naughts(label: String, effect: String) -> void:
+	raidwide_hit.emit(label, effect)
+	var sequence := get_tree().root.find_child("P4Seq", true, false)
+	if sequence == null:
+		return
+	var death_keys := _keys_from(sequence, "death_keys")
+	var field_keys := _keys_from(sequence, "field_keys")
+	var hp_before := {}
+	for key in ROLE_KEYS:
+		hp_before[key] = _hp.get(key, 0.0)
+	for key in death_keys:
+		set_hp_to_one(str(key))
+	for key in field_keys:
+		apply_damage(str(key), TIMELINE.FLOOD_FIELD_DAMAGE * damage_scale)
+	print("[HealerTrainer] %s: %d with Beyond Death dropped to 1 HP, %d with Allagan Field took %d" % [label, death_keys.size(), field_keys.size(), int(TIMELINE.FLOOD_FIELD_DAMAGE * damage_scale)])
+	_queue_support_heals(hp_before)
+
+
+func _keys_from(node: Node, property: String) -> Array:
+	var value = node.get(property)
+	if value is Array:
+		return value
+	return []
+
+
+# Beyond Death: HP is reduced to 1, but the person does not die.
+func set_hp_to_one(role_key: String) -> void:
+	if not _hp.has(role_key) or _dead.has(role_key):
+		return
+	_hp[role_key] = minf(float(_hp[role_key]), 1.0)
+	_push_to_ui(role_key)
 
 
 # The other healer (the Sage) heals part of what each person lost, a moment after the hit.
